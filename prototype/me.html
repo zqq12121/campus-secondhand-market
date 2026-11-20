@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>个人中心 · WU 校园闲置</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .profile { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+  .profile .info { flex: 1; min-width: 200px; }
+  .quick-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .quick-stats a { padding: 16px; border-radius: 12px; background: #F8FAFC; text-align: center; transition: background .15s; }
+  .quick-stats a:hover { background: var(--primary-soft); }
+  .credit-bar { height: 10px; border-radius: 999px; background: #E2E8F0; overflow: hidden; }
+  .credit-bar span { display: block; height: 100%; background: linear-gradient(90deg, #10B981, #047857); }
+  .my-goods .list-item .ops { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  @media (max-width: 768px) { .quick-stats { grid-template-columns: repeat(2, 1fr); } .my-goods .list-item { flex-wrap: wrap; } }
+</style>
+</head>
+<body data-page="me">
+<div id="site-header"></div>
+<main class="page"><div class="container">
+  <div class="layout-side">
+    <aside class="card side-menu hide-sm">
+      <a class="active" href="me.html"><i data-icon="user"></i>我的主页</a>
+      <a href="orders.html"><i data-icon="file"></i>我的订单</a>
+      <a href="want.html"><i data-icon="megaphone"></i>我的求购</a>
+      <a href="notifications.html"><i data-icon="bell"></i>消息通知</a>
+      <button type="button" data-open="profile-modal"><i data-icon="edit"></i>编辑资料</button>
+      <a href="login.html"><i data-icon="logout"></i>退出登录</a>
+    </aside>
+
+    <div class="stack">
+      <section class="card card-pad stack">
+        <div class="profile">
+          <span class="avatar avatar-lg">林</span>
+          <div class="info"><div class="row"><h1 style="font-size:20px">林晓</h1><span class="tag tag-green"><i data-icon="shield" class="icon-sm"></i>已认证</span></div>
+            <p class="subtle">linxiao2022@wu.edu.cn · 外国语学院 · 贝克兰德校区</p></div>
+          <button class="btn btn-outline" data-open="profile-modal"><i data-icon="edit"></i>编辑资料</button>
+        </div>
+        <div class="quick-stats">
+          <a href="orders.html"><div class="num" style="font-size:22px;font-weight:600">3</div><div class="subtle">进行中订单</div></a>
+          <a href="#selling"><div class="num" style="font-size:22px;font-weight:600">5</div><div class="subtle">在售</div></a>
+          <a href="#fav"><div class="num" style="font-size:22px;font-weight:600">12</div><div class="subtle">收藏</div></a>
+          <a href="#wallet"><div class="num" style="font-size:22px;font-weight:600">¥1,280</div><div class="subtle">平台余额</div></a>
+        </div>
+      </section>
+
+      <div class="grid-2">
+        <section class="card card-pad stack">
+          <div class="between"><h3 style="font-size:16px">信用分</h3><span class="tag tag-green">信用良好</span></div>
+          <div class="row" style="align-items:baseline"><span class="num" style="font-size:36px;font-weight:600">86</span><span class="subtle">/ 100 · 再加 4 分升级为「信用极好」</span></div>
+          <div class="credit-bar"><span style="width:86%"></span></div>
+          <ul class="subtle" style="margin:0;padding-left:18px">
+            <li>11-18 收到好评 <span class="up">+1</span></li>
+            <li>11-16 完成交易 <span class="up">+1</span></li>
+            <li>10-30 约好面交未到 <span class="down">−3</span></li>
+          </ul>
+        </section>
+        <section class="card card-pad stack" id="wallet">
+          <div class="between"><h3 style="font-size:16px">平台余额</h3><span class="subtle">演示用，不支持提现</span></div>
+          <span class="num" style="font-size:36px;font-weight:600">¥1,280.00</span>
+          <ul class="subtle" style="margin:0;padding-left:18px">
+            <li>11-15 担保订单放款 · 索尼耳机 <span class="up">+980.00</span></li>
+            <li>11-02 担保订单放款 · 台灯 <span class="up">+15.00</span></li>
+          </ul>
+        </section>
+      </div>
+
+      <section class="card my-goods" data-tabs id="selling">
+        <div class="tabs" style="padding:0 16px">
+          <button class="tab active" data-tab="sell">在售<span class="count">5</span></button>
+          <button class="tab" data-tab="audit">审核中<span class="count">1</span></button>
+          <button class="tab" data-tab="off">已下架<span class="count">2</span></button>
+          <button class="tab" data-tab="draft">草稿<span class="count">1</span></button>
+          <button class="tab" data-tab="fav">我的收藏<span class="count">12</span></button>
+        </div>
+        <div class="tab-panel active" data-panel="sell">
+          <div class="list-item"><span class="thumb tint-1"><i data-icon="book"></i></span><div style="flex:1;min-width:0">高等数学 第七版 上下册 同济<div class="subtle">¥25 · 326 浏览 · 12 收藏 · 还有 52 天自动下架</div></div>
+            <div class="ops"><button class="btn btn-outline btn-sm"><i data-icon="edit" class="icon-sm"></i>编辑</button><button class="btn btn-outline btn-sm" data-toast="已下架">下架</button></div></div>
+          <div class="list-item"><span class="thumb tint-5"><i data-icon="shirt"></i></span><div style="flex:1;min-width:0">优衣库 摇粒绒外套 M 码<div class="subtle">¥45 · 89 浏览 · 9 收藏</div></div>
+            <div class="ops"><button class="btn btn-outline btn-sm"><i data-icon="edit" class="icon-sm"></i>编辑</button><button class="btn btn-outline btn-sm" data-toast="已下架">下架</button></div></div>
+        </div>
+        <div class="tab-panel" data-panel="audit">
+          <div class="list-item"><span class="thumb tint-3"><i data-icon="cup"></i></span><div style="flex:1;min-width:0">宿舍小台灯 三档调光<div class="subtle">提交于 11-19 10:20 · 预计 24 小时内审核完成</div></div><span class="tag tag-yellow">审核中</span></div>
+        </div>
+        <div class="tab-panel" data-panel="off">
+          <div class="list-item"><span class="thumb tint-6"><i data-icon="bike"></i></span><div style="flex:1;min-width:0">捷安特山地车<div class="subtle">在售超过 60 天自动下架</div></div><button class="btn btn-primary btn-sm" data-toast="已重新上架">重新上架</button></div>
+          <div class="list-item"><span class="thumb tint-2"><i data-icon="phone"></i></span><div style="flex:1;min-width:0">二手手机 9 成新<div class="subtle" style="color:var(--danger)">审核驳回：描述中含站外联系方式</div></div><button class="btn btn-outline btn-sm">修改后重新提交</button></div>
+        </div>
+        <div class="tab-panel" data-panel="draft"><div class="empty">草稿：「Kindle Paperwhite 5」<br><a class="btn btn-outline btn-sm mt-16" href="publish.html">继续编辑</a></div></div>
+        <div class="tab-panel" data-panel="fav" id="fav"><div class="goods-grid" style="padding:16px" data-goods="1,5"></div></div>
+      </section>
+    </div>
+  </div>
+</div></main>
+
+<div class="modal-mask" id="profile-modal" role="dialog" aria-modal="true" aria-labelledby="pf-title"><div class="modal">
+  <div class="modal-head"><h3 id="pf-title">编辑资料</h3><button class="icon-btn" data-close aria-label="关闭"><i data-icon="x"></i></button></div>
+  <div class="modal-body">
+    <div class="row"><span class="avatar avatar-lg">林</span><button class="btn btn-outline btn-sm">更换头像</button></div>
+    <div class="field"><label for="pf-n">昵称</label><input id="pf-n" class="input" value="林晓"></div>
+    <div class="field"><label for="pf-c">学院</label><input id="pf-c" class="input" value="外国语学院"></div>
+    <div class="field"><label>所在校区</label><div class="radio-group" data-single><button class="radio-card active">贝克兰德</button><button class="radio-card">廷根</button></div></div>
+    <div class="field"><label for="pf-b">个人简介</label><textarea id="pf-b" class="textarea" style="min-height:80px">大三，出一些用不上的书和小物件。</textarea></div>
+    <div class="field"><label>校园邮箱</label><input class="input" value="linxiao2022@wu.edu.cn" disabled aria-label="校园邮箱"><span class="hint">邮箱即账号，不可修改</span></div>
+  </div>
+  <div class="modal-foot"><button class="btn btn-outline" data-close>取消</button><button class="btn btn-primary" data-close data-toast="资料已保存">保存</button></div>
+</div></div>
+<script src="assets/app.js"></script>
+</body>
+</html>

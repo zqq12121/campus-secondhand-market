@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>消息 · WU 校园闲置</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .chat-item .unread { position: absolute; right: 16px; bottom: 16px; min-width: 18px; height: 18px; border-radius: 999px; background: var(--danger); color: #fff; font-size: 12px; text-align: center; line-height: 18px; padding: 0 5px; font-family: var(--font-num); }
+  .chat-item .info { min-width: 0; flex: 1; }
+  .card-msg { display: flex; gap: 10px; align-items: center; background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 10px; width: 260px; color: var(--text); }
+  .chat-input .input { height: 40px; }
+</style>
+</head>
+<body data-page="chat" class="no-tabbar">
+<div id="site-header"></div>
+<main class="page" style="padding-bottom:24px"><div class="container">
+  <div class="card chat">
+    <aside class="chat-list" aria-label="会话列表">
+      <div class="card-head"><h3>消息</h3><span class="subtle">3 条未读</span></div>
+      <div class="chat-item active"><span class="avatar">陈</span><div class="info"><div class="between"><b>数码小陈</b><span class="subtle">14:32</span></div><div class="last">可以的，明天下午图书馆东门见</div></div></div>
+      <div class="chat-item"><span class="avatar">周</span><div class="info"><div class="between"><b>周同学</b><span class="subtle">13:05</span></div><div class="last">[商品] 戴尔 24 寸显示器</div></div><span class="unread">2</span></div>
+      <div class="chat-item"><span class="avatar">林</span><div class="info"><div class="between"><b>林晓</b><span class="subtle">昨天</span></div><div class="last">书还在吗？</div></div><span class="unread">1</span></div>
+      <div class="chat-item"><span class="avatar">宁</span><div class="info"><div class="between"><b>毕业生阿宁</b><span class="subtle">周一</span></div><div class="last">[系统] 订单已完成，快去评价吧</div></div></div>
+    </aside>
+
+    <section class="chat-main">
+      <div class="between" style="padding:12px 20px;border-bottom:1px solid var(--border)">
+        <div class="row"><a class="icon-btn show-sm" href="chat.html" aria-label="返回"><i data-icon="left"></i></a><b>数码小陈</b><span class="tag tag-green">信用极好</span></div>
+        <div class="row"><button class="icon-btn" data-open="more-modal" aria-label="更多操作"><i data-icon="more"></i></button></div>
+      </div>
+      <div class="chat-goods">
+        <span class="thumb tint-2" style="width:52px;height:52px"><i data-icon="phone"></i></span>
+        <div style="flex:1;min-width:0"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">iPad Air 5 64G 蓝色 带笔</div><span class="price">¥2650</span></div>
+        <a class="btn btn-buy btn-sm" href="checkout.html">立即购买</a>
+      </div>
+
+      <div class="chat-msgs" id="msgs" aria-live="polite">
+        <div class="msg-sys">今天 14:20</div>
+        <div class="msg me"><span class="avatar avatar-sm">林</span><div class="bubble">你好，iPad 还在吗？电池健康能截图看下吗</div></div>
+        <div class="msg"><span class="avatar avatar-sm">陈</span><div class="bubble">在的，稍等</div></div>
+        <div class="msg"><span class="avatar avatar-sm">陈</span><div class="bubble" style="padding:4px"><div class="tint-2" style="width:180px;height:130px;border-radius:12px;display:grid;place-items:center"><i data-icon="image" class="icon-lg"></i></div></div></div>
+        <div class="msg me"><span class="avatar avatar-sm">林</span><div class="bubble">好的，我加你微信细聊吧 ***</div></div>
+        <div class="alert alert-warn" style="align-self:center;max-width:420px"><i data-icon="alert"></i><span>检测到站外联系方式。站外交易平台无法保障，建议用担保交易。</span></div>
+        <div class="msg"><span class="avatar avatar-sm">陈</span><div class="bubble">就在平台上聊吧。可以面交验机，明天下午图书馆东门？</div></div>
+        <div class="msg me"><span class="avatar avatar-sm">林</span><div class="bubble">可以的，明天下午图书馆东门见</div></div>
+        <div class="msg"><span class="avatar avatar-sm">陈</span><a class="card-msg" href="goods.html"><span class="thumb tint-4" style="width:48px;height:48px"><i data-icon="headphones"></i></span><span><span style="font-size:13px">索尼 WH-1000XM4 降噪耳机</span><br><span class="price">¥980</span></span></a></div>
+      </div>
+
+      <form class="chat-input" id="chat-form">
+        <button type="button" class="icon-btn" aria-label="发送图片" data-toast="原型：选择图片发送"><i data-icon="image"></i></button>
+        <button type="button" class="icon-btn" aria-label="发送商品" data-toast="原型：选择我的在售商品发送"><i data-icon="package"></i></button>
+        <input class="input" id="chat-text" placeholder="输入消息，最多 500 字" maxlength="500" aria-label="消息内容">
+        <button class="btn btn-primary" type="submit"><i data-icon="send"></i>发送</button>
+      </form>
+    </section>
+  </div>
+</div></main>
+
+<div class="modal-mask" id="more-modal" role="dialog" aria-modal="true" aria-labelledby="m-title"><div class="modal" style="max-width:360px">
+  <div class="modal-head"><h3 id="m-title">更多操作</h3><button class="icon-btn" data-close aria-label="关闭"><i data-icon="x"></i></button></div>
+  <div class="modal-body">
+    <a class="btn btn-outline btn-block" href="user.html"><i data-icon="user"></i>查看 Ta 的主页</a>
+    <button class="btn btn-outline btn-block" data-close data-toast="举报已提交"><i data-icon="flag"></i>举报该用户</button>
+    <button class="btn btn-danger-outline btn-block" data-close data-toast="已拉黑，对方将无法给你发消息和下单"><i data-icon="ban"></i>拉黑</button>
+  </div>
+</div></div>
+
+<script src="assets/app.js"></script>
+<script>
+  const msgs = document.getElementById('msgs');
+  msgs.scrollTop = msgs.scrollHeight;
+  document.getElementById('chat-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const input = document.getElementById('chat-text');
+    const text = input.value.trim();
+    if (!text) return;
+    const row = document.createElement('div');
+    row.className = 'msg me';
+    row.innerHTML = '<span class="avatar avatar-sm">林</span><div class="bubble"></div>';
+    row.querySelector('.bubble').textContent = text;
+    msgs.appendChild(row);
+    input.value = '';
+    msgs.scrollTop = msgs.scrollHeight;
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>内容运营 · 管理后台</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  .cat-tree { padding: 8px 24px 16px; }
+  .cat-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .cat-row.child { padding-left: 32px; }
+  .cat-row .name { flex: 1; }
+  .words { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px 24px; }
+  .words .tag { height: 30px; padding: 0 6px 0 12px; font-size: 13px; }
+  .words .tag button { border: 0; background: none; cursor: pointer; color: inherit; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; }
+</style>
+</head>
+<body data-page="content">
+<div class="admin">
+  <div id="admin-side"></div>
+  <div class="admin-main">
+    <header class="admin-top"><h1 style="font-size:18px">内容运营</h1><div class="row"><span class="avatar avatar-sm">管</span><span class="hide-sm">admin</span></div></header>
+    <main class="admin-content">
+      <section class="card" data-tabs>
+        <div class="tabs" style="padding:0 16px"><button class="tab active" data-tab="cat">分类管理</button><button class="tab" data-tab="ann">公告与轮播</button><button class="tab" data-tab="word">敏感词库</button></div>
+
+        <div class="tab-panel active" data-panel="cat">
+          <div class="toolbar"><span class="subtle">分类下有商品时只能停用，不能删除</span><button class="btn btn-primary btn-sm" style="margin-left:auto"><i data-icon="plus" class="icon-sm"></i>新增一级分类</button></div>
+          <div class="cat-tree">
+            <div class="cat-row"><i data-icon="down" class="icon-sm"></i><span class="name"><b>教材书籍</b> <span class="subtle">· 412 件</span></span><span class="tag tag-green">启用</span><button class="btn btn-ghost btn-sm">新增子类</button><button class="btn btn-ghost btn-sm">编辑</button></div>
+            <div class="cat-row child"><span class="name">专业教材 <span class="subtle">· 236 件</span></span><span class="tag tag-green">启用</span><button class="btn btn-ghost btn-sm">编辑</button><button class="btn btn-ghost btn-sm" data-toast="已停用">停用</button></div>
+            <div class="cat-row child"><span class="name">考研考证 <span class="subtle">· 121 件</span></span><span class="tag tag-green">启用</span><button class="btn btn-ghost btn-sm">编辑</button><button class="btn btn-ghost btn-sm" data-toast="已停用">停用</button></div>
+            <div class="cat-row child"><span class="name">课外读物 <span class="subtle">· 55 件</span></span><span class="tag tag-green">启用</span><button class="btn btn-ghost btn-sm">编辑</button><button class="btn btn-ghost btn-sm" data-toast="已停用">停用</button></div>
+            <div class="cat-row"><i data-icon="right" class="icon-sm"></i><span class="name"><b>数码电子</b> <span class="subtle">· 318 件</span></span><span class="tag tag-green">启用</span><button class="btn btn-ghost btn-sm">新增子类</button><button class="btn btn-ghost btn-sm">编辑</button></div>
+            <div class="cat-row"><i data-icon="right" class="icon-sm"></i><span class="name"><b>生活用品</b> <span class="subtle">· 233 件</span></span><span class="tag tag-green">启用</span><button class="btn btn-ghost btn-sm">新增子类</button><button class="btn btn-ghost btn-sm">编辑</button></div>
+          </div>
+        </div>
+
+        <div class="tab-panel" data-panel="ann">
+          <div class="toolbar"><button class="btn btn-primary btn-sm" style="margin-left:auto"><i data-icon="plus" class="icon-sm"></i>新增</button></div>
+          <div class="table-wrap"><table class="table">
+            <thead><tr><th>类型</th><th>标题</th><th>排序</th><th>状态</th><th>更新时间</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td><span class="tag tag-blue">轮播图</span></td><td>寒假清仓 · 学长学姐的好物传下去</td><td class="num">1</td><td><span class="tag tag-green">上线</span></td><td class="subtle">11-10</td><td><div class="ops"><button class="btn btn-outline btn-sm">编辑</button><button class="btn btn-outline btn-sm" data-toast="已下线">下线</button></div></td></tr>
+              <tr><td><span class="tag">公告</span></td><td>严禁发布代考、答案等违规商品</td><td class="num">2</td><td><span class="tag tag-green">上线</span></td><td class="subtle">10-01</td><td><div class="ops"><button class="btn btn-outline btn-sm">编辑</button><button class="btn btn-outline btn-sm" data-toast="已下线">下线</button></div></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="tab-panel" data-panel="word">
+          <div class="toolbar"><input class="input" placeholder="输入敏感词，回车添加" aria-label="新增敏感词"><button class="btn btn-primary btn-sm" data-toast="已添加，缓存已刷新">添加</button><span class="subtle">共 128 个 · 修改后立即生效</span></div>
+          <div class="words">
+            <span class="tag tag-red">微信<button aria-label="删除 微信"><i data-icon="x" class="icon-sm"></i></button></span>
+            <span class="tag tag-red">QQ<button aria-label="删除 QQ"><i data-icon="x" class="icon-sm"></i></button></span>
+            <span class="tag tag-red">代考<button aria-label="删除 代考"><i data-icon="x" class="icon-sm"></i></button></span>
+            <span class="tag tag-red">答案<button aria-label="删除 答案"><i data-icon="x" class="icon-sm"></i></button></span>
+            <span class="tag tag-red">定金<button aria-label="删除 定金"><i data-icon="x" class="icon-sm"></i></button></span>
+            <span class="tag tag-red">刷单<button aria-label="删除 刷单"><i data-icon="x" class="icon-sm"></i></button></span>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+<script src="../assets/app.js"></script>
+</body>
+</html>

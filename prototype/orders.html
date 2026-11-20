@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>我的订单 · WU 校园闲置</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .order { border-bottom: 1px solid var(--border); }
+  .order:last-child { border-bottom: 0; }
+  .order-top { display: flex; justify-content: space-between; align-items: center; padding: 12px 24px; background: #FAFBFA; font-size: 13px; color: var(--text-2); gap: 8px; }
+  .order .list-item { border-bottom: 0; }
+  .order-ops { display: flex; justify-content: flex-end; gap: 8px; padding: 0 24px 16px; flex-wrap: wrap; }
+  @media (max-width: 768px) { .order-top, .order-ops { padding-left: 16px; padding-right: 16px; } }
+</style>
+</head>
+<body data-page="me">
+<div id="site-header"></div>
+<main class="page"><div class="container stack">
+  <div class="between"><h1 class="section-title">我的订单</h1>
+    <div class="row" data-single><button class="chip active">我买到的</button><button class="chip">我卖出的</button></div></div>
+
+  <section class="card" data-tabs>
+    <div class="tabs" style="padding:0 16px">
+      <button class="tab active" data-tab="all">全部</button>
+      <button class="tab" data-tab="all">待付款<span class="count">1</span></button>
+      <button class="tab" data-tab="all">待交付<span class="count">1</span></button>
+      <button class="tab" data-tab="all">待收货<span class="count">1</span></button>
+      <button class="tab" data-tab="all">售后</button>
+      <button class="tab" data-tab="all">已完成</button>
+    </div>
+    <div class="tab-panel active" data-panel="all">
+      <div class="order">
+        <div class="order-top"><span>订单号 CT202611190021 · 担保交易</span><span class="tag tag-orange">待付款 · 剩 12:43</span></div>
+        <div class="list-item"><span class="thumb tint-4"><i data-icon="headphones"></i></span><div style="flex:1;min-width:0">索尼 WH-1000XM4 降噪耳机 国行<div class="subtle">卖家：阿杰</div></div><span class="price">¥980</span></div>
+        <div class="order-ops"><button class="btn btn-outline btn-sm" data-toast="订单已取消">取消订单</button><a class="btn btn-buy btn-sm" href="order.html">去支付</a></div>
+      </div>
+      <div class="order">
+        <div class="order-top"><span>订单号 CT202611180107 · 担保交易</span><span class="tag tag-blue">待收货</span></div>
+        <div class="list-item"><span class="thumb tint-2"><i data-icon="phone"></i></span><div style="flex:1;min-width:0">iPad Air 5 64G 蓝色 带笔<div class="subtle">卖家：数码小陈 · 卖家已交货，6 天 21 小时后自动确认</div></div><span class="price">¥2650</span></div>
+        <div class="order-ops"><a class="btn btn-outline btn-sm" href="order.html">申请退款</a><a class="btn btn-primary btn-sm" href="order.html">确认收货</a></div>
+      </div>
+      <div class="order">
+        <div class="order-top"><span>订单号 CT202611160033 · 面交</span><span class="tag tag-yellow">待面交</span></div>
+        <div class="list-item"><span class="thumb tint-1"><i data-icon="book"></i></span><div style="flex:1;min-width:0">高等数学 第七版 上下册 同济<div class="subtle">卖家：林晓 · 贝克兰德 3 号食堂门口</div></div><span class="price">¥25</span></div>
+        <div class="order-ops"><a class="btn btn-outline btn-sm" href="chat.html">联系卖家</a><button class="btn btn-primary btn-sm" data-toast="交易完成，记得去评价">确认完成</button></div>
+      </div>
+      <div class="order">
+        <div class="order-top"><span>订单号 CT202611020018 · 面交</span><span class="tag tag-green">已完成</span></div>
+        <div class="list-item"><span class="thumb tint-3"><i data-icon="gift"></i></span><div style="flex:1;min-width:0">宿舍收纳箱 三个一起<div class="subtle">卖家：毕业生阿宁 · 互评截止 11 月 17 日</div></div><span class="price">免费送</span></div>
+        <div class="order-ops"><a class="btn btn-primary btn-sm" href="review.html">去评价</a></div>
+      </div>
+    </div>
+  </section>
+</div></main>
+<script src="assets/app.js"></script>
+</body>
+</html>

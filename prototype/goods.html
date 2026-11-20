@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>iPad Air 5 · WU 校园闲置</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .detail { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+  .gallery-main { border-radius: 16px; aspect-ratio: 1; }
+  .gallery-main > .icon { width: 120px; height: 120px; stroke-width: 1.2; }
+  .thumbs { display: flex; gap: 10px; margin-top: 12px; }
+  .thumbs button { width: 64px; height: 64px; border-radius: 12px; border: 2px solid transparent; cursor: pointer; display: grid; place-items: center; }
+  .thumbs button.active { border-color: var(--primary); }
+  .big-price { font-size: 34px; }
+  .kv { display: grid; grid-template-columns: 88px 1fr; gap: 10px 12px; font-size: 14px; }
+  .kv dt { color: var(--text-3); }
+  .kv dd { margin: 0; }
+  .seller-card { display: flex; align-items: center; gap: 14px; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+  .fav.active { color: var(--danger); border-color: #FCA5A5; }
+  .fav.active svg { fill: currentColor; }
+  .mobile-bar { display: none; }
+  @media (max-width: 768px) {
+    .detail { grid-template-columns: 1fr; gap: 16px; }
+    .actions.desk { display: none; }
+    .mobile-bar { display: flex; gap: 8px; position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: #fff; border-top: 1px solid var(--border); z-index: 40; }
+    .mobile-bar .btn { flex: 1; }
+    /* 留出与底部操作栏同高的空间：上下内边距 20 + 按钮 40 + 上边框 1 */
+    body.no-tabbar { padding-bottom: calc(61px + env(safe-area-inset-bottom)); }
+  }
+</style>
+</head>
+<body data-page="goods" class="no-tabbar">
+<div id="site-header"></div>
+<main class="page"><div class="container stack">
+  <nav class="subtle row" aria-label="面包屑"><a href="home.html">首页</a><i data-icon="right" class="icon-sm"></i><a href="search.html">数码电子</a><i data-icon="right" class="icon-sm"></i><span>手机平板</span></nav>
+
+  <section class="card card-pad detail">
+    <div>
+      <div id="gallery-main" class="gallery-main goods-cover tint-2"><i data-icon="phone"></i></div>
+      <div class="thumbs">
+        <button class="tint-2 active" data-thumb="2" aria-label="图片 1"><i data-icon="image"></i></button>
+        <button class="tint-1" data-thumb="1" aria-label="图片 2"><i data-icon="image"></i></button>
+        <button class="tint-4" data-thumb="4" aria-label="图片 3"><i data-icon="image"></i></button>
+        <button class="tint-6" data-thumb="6" aria-label="图片 4"><i data-icon="image"></i></button>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="row" style="flex-wrap:wrap"><span class="tag tag-green"><i data-icon="shield" class="icon-sm"></i>支持担保</span><span class="tag tag-blue">支持面交</span><span class="tag">几乎全新</span></div>
+      <h1 style="font-size:22px">iPad Air 5 64G 蓝色 带笔 电池健康 92%</h1>
+      <div class="row" style="align-items:baseline;gap:12px"><span class="price big-price"><small>¥</small>2650</span><span class="strike">原价 ¥4399</span></div>
+      <div class="row subtle"><i data-icon="eye" class="icon-sm"></i>326 浏览<span>·</span><i data-icon="heart" class="icon-sm"></i>48 收藏<span>·</span>25 分钟前发布</div>
+      <div class="divider" style="margin:4px 0"></div>
+      <dl class="kv">
+        <dt>交易方式</dt><dd>面交 / 担保交易（担保：付款到平台，确认收货后打款给卖家）</dd>
+        <dt>面交地点</dt><dd><span class="row"><i data-icon="pin" class="icon-sm"></i>廷根校区 · 图书馆东门</span></dd>
+        <dt>库存</dt><dd>1 件</dd>
+      </dl>
+      <div class="actions desk">
+        <a class="btn btn-buy btn-lg" href="checkout.html">立即购买</a>
+        <a class="btn btn-outline btn-lg" href="chat.html"><i data-icon="message"></i>聊一聊</a>
+        <button class="btn btn-outline btn-lg fav" data-fav><i data-icon="heart"></i>收藏</button>
+        <button class="btn btn-ghost btn-lg" data-open="report-modal"><i data-icon="flag"></i>举报</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="layout-main-aside">
+    <section class="card card-pad stack">
+      <h2 class="section-title" style="font-size:17px">商品描述</h2>
+      <p class="muted">去年 9 月在官网买的，一直贴膜带壳用，无磕碰无维修。电池健康 92%，配件有原装充电器、二代 Apple Pencil（笔尖有轻微磨损）。<br><br>换了笔记本所以出，可在廷根图书馆当面验机，也支持担保交易。不讲价，谢谢。</p>
+      <div class="alert alert-warn"><i data-icon="alert"></i><span>请在平台内沟通和交易。私下加微信、转账给对方的交易平台无法保障。</span></div>
+    </section>
+    <aside class="card card-pad stack">
+      <div class="seller-card">
+        <span class="avatar avatar-lg">陈</span>
+        <div><b>数码小陈</b><div class="subtle">计算机学院 · 廷根校区</div><span class="tag tag-green mt-8">信用极好 96</span></div>
+      </div>
+      <div class="grid-2" style="gap:8px;text-align:center">
+        <div class="stat"><span class="v" style="font-size:22px">98%</span><span class="l">好评率</span></div>
+        <div class="stat"><span class="v" style="font-size:22px">37</span><span class="l">成交数</span></div>
+      </div>
+      <a class="btn btn-outline btn-block" href="user.html">查看 Ta 的主页</a>
+    </aside>
+  </div>
+
+  <section class="stack" style="gap:12px">
+    <h2 class="section-title" style="font-size:17px">看了这件的同学还看了</h2>
+    <div class="goods-grid" data-goods="7,11"></div>
+  </section>
+</div></main>
+
+<div class="mobile-bar">
+  <button class="btn btn-outline fav" data-fav aria-label="收藏"><i data-icon="heart"></i></button>
+  <a class="btn btn-outline" href="chat.html">聊一聊</a>
+  <a class="btn btn-buy" href="checkout.html">立即购买</a>
+</div>
+
+<div class="modal-mask" id="report-modal" role="dialog" aria-modal="true" aria-labelledby="rp-title"><div class="modal">
+  <div class="modal-head"><h3 id="rp-title">举报商品</h3><button class="icon-btn" data-close aria-label="关闭"><i data-icon="x"></i></button></div>
+  <div class="modal-body">
+    <div class="field"><label>举报原因<span class="req">*</span></label>
+      <div class="radio-group" data-single>
+        <button class="radio-card active">禁售品</button><button class="radio-card">虚假信息</button><button class="radio-card">诈骗</button><button class="radio-card">辱骂骚扰</button><button class="radio-card">其他</button>
+      </div></div>
+    <div class="field"><label for="rp-desc">补充说明</label><textarea id="rp-desc" class="textarea" placeholder="描述你遇到的问题（选填，最多 500 字）"></textarea></div>
+    <div class="field"><label>截图凭证</label><div class="upload-grid"><div class="upload-slot"><span><i data-icon="upload"></i><br>上传</span></div></div></div>
+    <p class="subtle">同一商品 24 小时内只能举报一次，处理结果会通过站内通知告诉你。</p>
+  </div>
+  <div class="modal-foot"><button class="btn btn-outline" data-close>取消</button><button class="btn btn-primary" data-close data-toast="举报已提交">提交举报</button></div>
+</div></div>
+<script src="assets/app.js"></script>
+</body>
+</html>

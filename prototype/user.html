@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>数码小陈的主页 · WU 校园闲置</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .cover { height: 120px; border-radius: 16px 16px 0 0; background: linear-gradient(120deg, #047857, #10B981); }
+  .head { padding: 0 24px 24px; display: flex; gap: 20px; align-items: flex-end; margin-top: -36px; flex-wrap: wrap; }
+  .head .avatar { border: 4px solid #fff; width: 88px; height: 88px; font-size: 32px; }
+  .head .info { flex: 1; min-width: 200px; }
+  .nums { display: flex; gap: 28px; }
+  .review { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; gap: 12px; }
+  .review:last-child { border-bottom: 0; }
+  @media (max-width: 768px) { .head { padding: 0 16px 16px; } .review { padding: 14px 16px; } }
+</style>
+</head>
+<body data-page="user">
+<div id="site-header"></div>
+<main class="page"><div class="container stack">
+  <section class="card">
+    <div class="cover"></div>
+    <div class="head">
+      <span class="avatar">陈</span>
+      <div class="info"><div class="row"><h1 style="font-size:20px">数码小陈</h1><span class="tag tag-green">信用极好 96</span></div>
+        <p class="subtle">计算机学院 · 廷根校区 · 加入 1 年 2 个月</p><p class="muted mt-8">只出自用数码，支持当面验机。</p></div>
+      <div class="nums">
+        <div class="stat"><span class="v" style="font-size:22px">98%</span><span class="l">好评率</span></div>
+        <div class="stat"><span class="v" style="font-size:22px">37</span><span class="l">成交</span></div>
+        <div class="stat"><span class="v" style="font-size:22px">6</span><span class="l">在售</span></div>
+      </div>
+      <div class="row"><a class="btn btn-primary" href="chat.html"><i data-icon="message"></i>私信</a><button class="btn btn-ghost" data-toast="举报已提交" aria-label="举报"><i data-icon="flag"></i></button></div>
+    </div>
+  </section>
+
+  <section class="card" data-tabs>
+    <div class="tabs" style="padding:0 16px">
+      <button class="tab active" data-tab="g">在售商品<span class="count">6</span></button>
+      <button class="tab" data-tab="r">收到的评价<span class="count">36</span></button>
+    </div>
+    <div class="tab-panel active" data-panel="g"><div class="goods-grid" style="padding:16px" data-goods="1,4"></div></div>
+    <div class="tab-panel" data-panel="r">
+      <div class="row" style="padding:16px 24px 0" data-single><button class="chip active">全部 36</button><button class="chip">好评 35</button><button class="chip">中评 1</button><button class="chip">差评 0</button></div>
+      <div class="review"><span class="avatar avatar-sm">许</span><div class="stack" style="gap:6px;flex:1"><div class="between"><b style="font-size:14px">许同学 <span class="tag tag-green">好评</span></b><span class="subtle">11-12</span></div><p>耳机成色很好，面交很准时。</p><div class="row"><span class="tag">描述相符</span><span class="tag">准时赴约</span></div></div></div>
+      <div class="review"><span class="avatar avatar-sm">何</span><div class="stack" style="gap:6px;flex:1"><div class="between"><b style="font-size:14px">何同学 <span class="tag tag-yellow">中评</span></b><span class="subtle">10-28</span></div><p>东西没问题，回复有点慢。</p><p class="subtle" style="background:#F8FAFC;padding:8px 12px;border-radius:8px">卖家解释：那几天在考试，抱歉。</p></div></div>
+    </div>
+  </section>
+</div></main>
+<script src="assets/app.js"></script>
+</body>
+</html>

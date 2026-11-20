@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>举报处理 · 管理后台</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-page="reports">
+<div class="admin">
+  <div id="admin-side"></div>
+  <div class="admin-main">
+    <header class="admin-top"><h1 style="font-size:18px">举报处理</h1><div class="row"><span class="avatar avatar-sm">管</span><span class="hide-sm">admin</span></div></header>
+    <main class="admin-content">
+      <section class="card" data-tabs>
+        <div class="tabs" style="padding:0 16px"><button class="tab active" data-tab="r">待处理<span class="count">5</span></button><button class="tab" data-tab="r">已成立</button><button class="tab" data-tab="r">不成立</button></div>
+        <div class="tab-panel active table-wrap" data-panel="r">
+          <table class="table">
+            <thead><tr><th>举报对象</th><th>原因</th><th>举报说明</th><th>举报人</th><th>被举报次数</th><th>时间</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td><span class="tag tag-blue">商品</span> 全新 iPhone 16 只要 999</td><td><span class="tag tag-red">诈骗</span></td><td class="muted">让我先转定金到支付宝</td><td>周同学</td><td class="num">4</td><td class="subtle">11-19 11:20</td>
+                <td><button class="btn btn-primary btn-sm" data-open="handle-modal">处理</button></td></tr>
+              <tr><td><span class="tag tag-yellow">用户</span> 阿强</td><td><span class="tag">辱骂骚扰</span></td><td class="muted">砍价不成就骂人</td><td>小鹿</td><td class="num">1</td><td class="subtle">11-18 20:41</td>
+                <td><button class="btn btn-primary btn-sm" data-open="handle-modal">处理</button></td></tr>
+              <tr><td><span class="tag tag-green">求购</span> 收代课</td><td><span class="tag">禁售品</span></td><td class="muted">代课属于违规服务</td><td>匿名</td><td class="num">2</td><td class="subtle">11-18 09:02</td>
+                <td><button class="btn btn-primary btn-sm" data-open="handle-modal">处理</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div class="modal-mask" id="handle-modal" role="dialog" aria-modal="true" aria-labelledby="hd-title"><div class="modal">
+  <div class="modal-head"><h3 id="hd-title">处理举报</h3><button class="icon-btn" data-close aria-label="关闭"><i data-icon="x"></i></button></div>
+  <div class="modal-body">
+    <div class="alert alert-danger"><i data-icon="alert"></i><span>该商品 24 小时内被 4 人举报为诈骗。</span></div>
+    <div class="field"><label>判定</label><div class="radio-group" data-single><button class="radio-card active">成立</button><button class="radio-card">不成立</button></div></div>
+    <div class="field"><label>处理措施（可多选）</label><div class="row" style="flex-wrap:wrap">
+      <button class="chip active" onclick="this.classList.toggle('active')">下架商品</button>
+      <button class="chip active" onclick="this.classList.toggle('active')">扣 30 信用分</button>
+      <button class="chip active" onclick="this.classList.toggle('active')">永久封禁</button>
+      <button class="chip" onclick="this.classList.toggle('active')">禁言 7 天</button></div></div>
+    <div class="field"><label for="hd-r">处理说明<span class="req">*</span></label><textarea id="hd-r" class="textarea" style="min-height:80px">诱导站外转账定金，判定为诈骗。</textarea><span class="hint">结果会通知举报人和被举报人</span></div>
+  </div>
+  <div class="modal-foot"><button class="btn btn-outline" data-close>取消</button><button class="btn btn-primary" data-close data-toast="已处理并通知双方">提交</button></div>
+</div></div>
+<script src="../assets/app.js"></script>
+</body>
+</html>

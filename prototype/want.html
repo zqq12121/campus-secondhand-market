@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>求购广场 · WU 校园闲置</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .want-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+  .want { display: flex; flex-direction: column; gap: 10px; padding: 20px; }
+  .want h3 { font-size: 16px; }
+  .want .budget { font-family: var(--font-num); color: var(--price); font-weight: 600; }
+  .want .desc { color: var(--text-2); font-size: 14px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .want .foot { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border); }
+  @media (max-width: 768px) { .want-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body data-page="want">
+<div id="site-header"></div>
+<main class="page"><div class="container stack">
+  <div class="between">
+    <div><h1 class="section-title">求购广场</h1><p class="subtle">找不到想要的？发个求购，有货的同学会来找你</p></div>
+    <button class="btn btn-primary" data-open="want-modal"><i data-icon="plus"></i>发布求购</button>
+  </div>
+
+  <div class="row" style="flex-wrap:wrap" data-single>
+    <button class="chip active">全部</button><button class="chip">教材书籍</button><button class="chip">数码电子</button><button class="chip">生活用品</button><button class="chip">服饰鞋包</button><button class="chip">运动出行</button>
+  </div>
+
+  <div class="want-grid">
+    <article class="card want"><div class="between"><span class="tag tag-green">进行中</span><span class="subtle">剩 6 天</span></div>
+      <h3>求一台 24 寸显示器，有 Type-C 口最好</h3><p class="desc">宿舍用写代码，要求无坏点，贝克兰德校区当面验货，预算内都可以聊。</p>
+      <div class="row"><span class="subtle">预算</span><span class="budget">¥300 – 600</span><span class="tag">数码电子</span></div>
+      <div class="foot"><span class="row subtle"><span class="avatar avatar-sm">周</span>周同学 · 贝克兰德</span><a class="btn btn-primary btn-sm" href="chat.html">我有</a></div></article>
+
+    <article class="card want"><div class="between"><span class="tag tag-green">进行中</span><span class="subtle">剩 2 天</span></div>
+      <h3>收 线性代数 同济第六版 课本</h3><p class="desc">下周上课要用，笔记多一点也没关系。</p>
+      <div class="row"><span class="subtle">预算</span><span class="budget">¥10 – 20</span><span class="tag">教材书籍</span></div>
+      <div class="foot"><span class="row subtle"><span class="avatar avatar-sm">许</span>许同学 · 廷根</span><a class="btn btn-primary btn-sm" href="chat.html">我有</a></div></article>
+
+    <article class="card want"><div class="between"><span class="tag tag-green">进行中</span><span class="subtle">剩 13 天</span></div>
+      <h3>求购一辆二手电动车，能骑就行</h3><p class="desc">两个校区间通勤用，续航 30km 以上，有充电器。</p>
+      <div class="row"><span class="subtle">预算</span><span class="budget">¥500 – 1200</span><span class="tag">运动出行</span></div>
+      <div class="foot"><span class="row subtle"><span class="avatar avatar-sm">赵</span>赵同学 · 廷根</span><a class="btn btn-primary btn-sm" href="chat.html">我有</a></div></article>
+
+    <article class="card want"><div class="between"><span class="tag tag-blue">我发布的</span><span class="subtle">剩 4 天</span></div>
+      <h3>收一个宿舍用小冰箱</h3><p class="desc">50L 以内，静音，贝克兰德 6 号楼可自提。</p>
+      <div class="row"><span class="subtle">预算</span><span class="budget">¥100 – 250</span><span class="tag">生活用品</span></div>
+      <div class="foot"><span class="subtle">已有 2 位同学响应</span><div class="row"><button class="btn btn-outline btn-sm" data-toast="求购已关闭">关闭求购</button><button class="btn btn-primary btn-sm" data-toast="已标记为已解决">已解决</button></div></div></article>
+  </div>
+</div></main>
+
+<div class="modal-mask" id="want-modal" role="dialog" aria-modal="true" aria-labelledby="w-title"><div class="modal">
+  <div class="modal-head"><h3 id="w-title">发布求购</h3><button class="icon-btn" data-close aria-label="关闭"><i data-icon="x"></i></button></div>
+  <div class="modal-body">
+    <div class="field"><label for="w-t">想要什么<span class="req">*</span></label><input id="w-t" class="input" maxlength="30" placeholder="例如：求一台 24 寸显示器"></div>
+    <div class="field"><label for="w-d">具体要求</label><textarea id="w-d" class="textarea" placeholder="型号、成色、面交地点等"></textarea></div>
+    <div class="grid-2" style="gap:12px">
+      <div class="field"><label for="w-c">分类<span class="req">*</span></label><select id="w-c" class="select"><option>数码电子</option><option>教材书籍</option><option>生活用品</option></select></div>
+      <div class="field"><label for="w-min">预算（元）</label><div class="input-group"><input id="w-min" class="input" placeholder="最低"><input class="input" placeholder="最高" aria-label="最高预算"></div></div>
+    </div>
+    <div class="field"><label>有效期</label><div class="radio-group" data-single>
+      <button class="radio-card">3 天</button><button class="radio-card active">7 天</button><button class="radio-card">15 天</button><button class="radio-card">30 天</button></div></div>
+    <p class="subtle">有新商品匹配你的求购时，会发站内通知提醒你。每人最多同时 10 条有效求购。</p>
+  </div>
+  <div class="modal-foot"><button class="btn btn-outline" data-close>取消</button><button class="btn btn-primary" data-close data-toast="求购已发布">发布</button></div>
+</div></div>
+<script src="assets/app.js"></script>
+</body>
+</html>

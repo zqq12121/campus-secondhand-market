@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>权限与日志 · 管理后台</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  .perm-group { padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .perm-group label { display: inline-flex; align-items: center; gap: 6px; margin: 6px 16px 0 0; font-size: 14px; }
+</style>
+</head>
+<body data-page="system">
+<div class="admin">
+  <div id="admin-side"></div>
+  <div class="admin-main">
+    <header class="admin-top"><h1 style="font-size:18px">权限与日志</h1><div class="row"><span class="avatar avatar-sm">管</span><span class="hide-sm">admin · 超级管理员</span></div></header>
+    <main class="admin-content">
+      <section class="card" data-tabs>
+        <div class="tabs" style="padding:0 16px"><button class="tab active" data-tab="adm">管理员</button><button class="tab" data-tab="role">角色权限</button><button class="tab" data-tab="log">操作日志</button></div>
+
+        <div class="tab-panel active" data-panel="adm">
+          <div class="toolbar"><span class="subtle">只有超级管理员可以管理账号和角色</span><button class="btn btn-primary btn-sm" style="margin-left:auto"><i data-icon="plus" class="icon-sm"></i>新增管理员</button></div>
+          <div class="table-wrap"><table class="table">
+            <thead><tr><th>账号</th><th>姓名</th><th>角色</th><th>状态</th><th>最近登录</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td>admin</td><td>系统管理员</td><td><span class="tag tag-green">超级管理员</span></td><td><span class="tag tag-green">启用</span></td><td class="subtle">11-19 14:58</td><td class="subtle">—</td></tr>
+              <tr><td>audit01</td><td>王老师</td><td><span class="tag">普通管理员</span></td><td><span class="tag tag-green">启用</span></td><td class="subtle">11-19 09:12</td><td><div class="ops"><button class="btn btn-outline btn-sm">编辑</button><button class="btn btn-outline btn-sm" data-toast="已停用">停用</button></div></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="tab-panel" data-panel="role">
+          <div class="card-pad">
+            <div class="row" data-single><button class="chip">超级管理员</button><button class="chip active">普通管理员</button></div>
+            <div class="perm-group"><b>审核</b><br><label><input type="checkbox" checked>商品审核</label><label><input type="checkbox" checked>批量操作</label></div>
+            <div class="perm-group"><b>管理</b><br><label><input type="checkbox" checked>查看用户</label><label><input type="checkbox">处罚用户</label><label><input type="checkbox">调整信用分</label><label><input type="checkbox" checked>订单查询</label><label><input type="checkbox">纠纷裁决</label><label><input type="checkbox" checked>举报处理</label></div>
+            <div class="perm-group"><b>运营</b><br><label><input type="checkbox">分类管理</label><label><input type="checkbox" checked>公告与轮播</label><label><input type="checkbox">敏感词库</label></div>
+            <div class="mt-16"><button class="btn btn-primary" data-toast="权限已保存">保存</button></div>
+          </div>
+        </div>
+
+        <div class="tab-panel" data-panel="log">
+          <div class="toolbar"><input class="input" placeholder="管理员账号" aria-label="按管理员账号筛选"><select class="select" aria-label="按模块筛选"><option>全部模块</option><option>商品审核</option><option>用户管理</option><option>纠纷裁决</option></select><button class="btn btn-primary btn-sm">查询</button></div>
+          <div class="table-wrap"><table class="table">
+            <thead><tr><th>时间</th><th>管理员</th><th>模块</th><th>操作</th><th>对象 ID</th><th>IP</th></tr></thead>
+            <tbody>
+              <tr><td class="subtle">11-19 14:31</td><td>audit01</td><td>商品审核</td><td>驳回：含站外联系方式</td><td class="num">10233</td><td class="num">10.12.4.21</td></tr>
+              <tr><td class="subtle">11-19 11:02</td><td>admin</td><td>用户管理</td><td>永久封禁：诈骗</td><td class="num">2081</td><td class="num">10.12.4.8</td></tr>
+              <tr><td class="subtle">11-18 16:45</td><td>admin</td><td>纠纷裁决</td><td>全额退款给买家</td><td class="num">551</td><td class="num">10.12.4.8</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+<script src="../assets/app.js"></script>
+</body>
+</html>

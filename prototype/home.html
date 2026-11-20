@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>首页 · WU 校园闲置</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .hero { display: grid; grid-template-columns: 1fr 300px; gap: 16px; }
+  .banner { border-radius: 20px; padding: 32px; background: linear-gradient(120deg, #047857, #10B981); color: #fff; display: flex; flex-direction: column; justify-content: center; gap: 12px; min-height: 200px; }
+  .banner h1 { font-size: 30px; text-wrap: balance; }
+  .banner p { opacity: .92; }
+  .banner .btn { background: #fff; color: var(--primary); align-self: flex-start; }
+  .quick { display: flex; flex-direction: column; gap: 12px; }
+  .quick a { flex: 1; display: flex; align-items: center; gap: 12px; padding: 16px; border-radius: 16px; background: #fff; border: 1px solid var(--border); transition: border-color .15s; }
+  .quick a:hover { border-color: var(--primary); }
+  .quick .ic { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; flex: none; }
+  .cats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+  .cat { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 8px; border-radius: 16px; background: #fff; border: 1px solid var(--border); font-size: 14px; transition: border-color .15s, color .15s; }
+  .cat:hover { border-color: var(--primary); color: var(--primary); }
+  .cat .ic { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; }
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; }
+  @media (max-width: 768px) {
+    .hero { grid-template-columns: 1fr; }
+    .banner { padding: 24px; min-height: 0; }
+    .banner h1 { font-size: 22px; }
+    .quick { flex-direction: row; }
+    .quick a { padding: 12px 8px; font-size: 13px; flex-direction: column; text-align: center; gap: 6px; }
+    .quick .ic { width: 36px; height: 36px; }
+    .quick .subtle { display: none; }
+    .cats { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  }
+</style>
+</head>
+<body data-page="home">
+<div id="site-header"></div>
+<main class="page"><div class="container stack">
+
+  <section class="hero">
+    <div class="banner">
+      <span class="tag" style="background:rgba(255,255,255,.2);color:#fff;align-self:flex-start">寒假清仓 · 1 月 5 日 – 1 月 20 日</span>
+      <h1>学长学姐的好物，在校园里传下去</h1>
+      <p>只有 @wu.edu.cn 认证同学才能交易，面交或担保，放心买卖。</p>
+      <a class="btn" href="publish.html">发布我的闲置</a>
+    </div>
+    <div class="quick">
+      <a href="want.html"><span class="ic tint-3"><i data-icon="megaphone"></i></span><span><b>求购广场</b><br><span class="subtle">发布需求，等人来卖</span></span></a>
+      <a href="search.html?mode=2"><span class="ic tint-1"><i data-icon="shield"></i></span><span><b>担保交易</b><br><span class="subtle">确认收货后才打款</span></span></a>
+      <a href="search.html?free=1"><span class="ic tint-5"><i data-icon="gift"></i></span><span><b>免费送</b><br><span class="subtle">自提即可带走</span></span></a>
+    </div>
+  </section>
+
+  <section class="cats" aria-label="商品分类">
+    <a class="cat" href="search.html"><span class="ic tint-1"><i data-icon="book" class="icon-lg"></i></span>教材书籍</a>
+    <a class="cat" href="search.html"><span class="ic tint-2"><i data-icon="phone" class="icon-lg"></i></span>数码电子</a>
+    <a class="cat" href="search.html"><span class="ic tint-3"><i data-icon="cup" class="icon-lg"></i></span>生活用品</a>
+    <a class="cat" href="search.html"><span class="ic tint-5"><i data-icon="shirt" class="icon-lg"></i></span>服饰鞋包</a>
+    <a class="cat" href="search.html"><span class="ic tint-6"><i data-icon="bike" class="icon-lg"></i></span>运动出行</a>
+    <a class="cat" href="search.html"><span class="ic tint-4"><i data-icon="grid" class="icon-lg"></i></span>其他闲置</a>
+  </section>
+
+  <section class="stack" style="gap:12px">
+    <div class="between">
+      <h2 class="section-title">最新发布</h2>
+      <div class="filters" data-single>
+        <button class="chip active">全部校区</button>
+        <button class="chip">贝克兰德</button>
+        <button class="chip">廷根</button>
+      </div>
+    </div>
+    <div class="goods-grid" data-goods="0,12"></div>
+    <div style="text-align:center"><button class="btn btn-outline" data-toast="原型：滚动到底部自动加载下一页（每页 20 条）">加载更多</button></div>
+  </section>
+
+</div></main>
+<script src="assets/app.js"></script>
+</body>
+</html>

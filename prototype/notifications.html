@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>消息通知 · WU 校园闲置</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .wrap { max-width: 800px; margin: 0 auto; }
+  .noti { display: flex; gap: 14px; padding: 16px 24px; border-bottom: 1px solid var(--border); position: relative; transition: background .15s; }
+  .noti:hover { background: #FAFBFA; }
+  .noti.unread::after { content: ""; position: absolute; right: 24px; top: 22px; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
+  .noti .ic { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex: none; }
+  .noti .body { flex: 1; min-width: 0; padding-right: 16px; }
+  @media (max-width: 768px) { .noti { padding: 14px 16px; } }
+</style>
+</head>
+<body data-page="notice">
+<div id="site-header"></div>
+<main class="page"><div class="container wrap stack">
+  <div class="between"><h1 class="section-title">消息通知</h1><button class="btn btn-ghost btn-sm" data-toast="已全部标为已读"><i data-icon="check" class="icon-sm"></i>全部已读</button></div>
+  <section class="card" data-tabs>
+    <div class="tabs" style="padding:0 16px">
+      <button class="tab active" data-tab="a">全部</button><button class="tab" data-tab="a">交易<span class="count">2</span></button><button class="tab" data-tab="a">审核</button><button class="tab" data-tab="a">求购匹配<span class="count">1</span></button><button class="tab" data-tab="a">系统</button>
+    </div>
+    <div class="tab-panel active" data-panel="a">
+      <a class="noti unread" href="order.html"><span class="ic tint-2"><i data-icon="package"></i></span><div class="body"><b>卖家已交货</b><p class="muted">「iPad Air 5」卖家已交货，请检查后确认收货。7 天后将自动确认。</p><span class="subtle">15:10</span></div></a>
+      <a class="noti unread" href="search.html"><span class="ic tint-3"><i data-icon="megaphone"></i></span><div class="body"><b>有新商品匹配你的求购</b><p class="muted">你求购的「宿舍用小冰箱」有同学发布了「美的 45L 冰箱」，去看看？</p><span class="subtle">13:42</span></div></a>
+      <a class="noti unread" href="orders.html"><span class="ic tint-1"><i data-icon="wallet"></i></span><div class="body"><b>担保订单已放款</b><p class="muted">「索尼 WH-1000XM4」买家已确认收货，¥980.00 已存入你的平台余额。</p><span class="subtle">昨天 21:05</span></div></a>
+      <a class="noti" href="me.html"><span class="ic tint-5"><i data-icon="audit"></i></span><div class="body"><b>商品审核未通过</b><p class="muted">「二手手机 9 成新」描述中含站外联系方式，请修改后重新提交。</p><span class="subtle">11-17</span></div></a>
+      <a class="noti" href="me.html"><span class="ic tint-6"><i data-icon="trend"></i></span><div class="body"><b>信用分 +1</b><p class="muted">你在「高等数学」交易中收到好评，当前信用分 86。</p><span class="subtle">11-16</span></div></a>
+      <a class="noti" href="announcement.html"><span class="ic tint-4"><i data-icon="bell"></i></span><div class="body"><b>平台公告</b><p class="muted">寒假清仓活动 1 月 5 日开启，免费送商品会优先展示在首页。</p><span class="subtle">11-10</span></div></a>
+    </div>
+  </section>
+</div></main>
+<script src="assets/app.js"></script>
+</body>
+</html>

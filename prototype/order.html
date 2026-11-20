@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>订单详情 · WU 校园闲置</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .status-hero { background: linear-gradient(120deg, #047857, #10B981); color: #fff; border-radius: 16px; padding: 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .status-hero h1 { font-size: 22px; }
+  .status-hero p { opacity: .92; margin-top: 4px; }
+  .status-hero .btn-outline { background: transparent; border-color: rgba(255,255,255,.7); color: #fff; }
+  .status-hero .btn-outline:hover { background: rgba(255,255,255,.12); color: #fff; }
+  .status-hero .btn-light { background: #fff; color: var(--primary); }
+  .kv { display: grid; grid-template-columns: 96px 1fr; gap: 10px; font-size: 14px; }
+  .kv dt { color: var(--text-3); } .kv dd { margin: 0; }
+  .timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 16px; }
+  .timeline li { display: flex; gap: 12px; font-size: 14px; }
+  .timeline .d { width: 10px; height: 10px; border-radius: 50%; background: var(--border); margin-top: 6px; flex: none; }
+  .timeline li:first-child .d { background: var(--primary); box-shadow: 0 0 0 4px var(--primary-soft); }
+  @media (max-width: 768px) { .steps .step { font-size: 12px; } }
+</style>
+</head>
+<body data-page="me" class="no-tabbar">
+<div id="site-header"></div>
+<main class="page"><div class="container stack">
+  <nav class="subtle row"><a href="orders.html" class="row"><i data-icon="left" class="icon-sm"></i>我的订单</a></nav>
+
+  <section class="status-hero">
+    <div><h1>卖家已交货，等待你确认收货</h1><p>请当面检查商品。6 天 21 小时后系统自动确认收货，钱会打给卖家。</p></div>
+    <div class="row"><button class="btn btn-outline" data-open="refund-modal">申请退款</button><button class="btn btn-light" data-open="confirm-modal">确认收货</button></div>
+  </section>
+
+  <section class="card card-pad">
+    <div class="steps" aria-label="担保交易进度">
+      <div class="step done"><span class="dot"><i data-icon="check" class="icon-sm"></i></span>提交订单<span class="subtle">11-18 20:31</span></div>
+      <div class="step done"><span class="dot"><i data-icon="check" class="icon-sm"></i></span>已付款<span class="subtle">11-18 20:33</span></div>
+      <div class="step done"><span class="dot"><i data-icon="check" class="icon-sm"></i></span>卖家已交货<span class="subtle">11-19 15:10</span></div>
+      <div class="step current"><span class="dot">4</span>确认收货</div>
+      <div class="step"><span class="dot">5</span>双方互评</div>
+    </div>
+  </section>
+
+  <div class="layout-main-aside">
+    <div class="stack">
+      <section class="card">
+        <div class="card-head"><h3>商品信息</h3><span class="tag tag-green"><i data-icon="shield" class="icon-sm"></i>担保交易</span></div>
+        <div class="list-item"><span class="thumb tint-2"><i data-icon="phone"></i></span><div style="flex:1;min-width:0">iPad Air 5 64G 蓝色 带笔 电池健康 92%<div class="subtle">¥2650 × 1</div></div><span class="price" style="font-size:18px">¥2650</span></div>
+      </section>
+      <section class="card card-pad">
+        <dl class="kv">
+          <dt>订单号</dt><dd class="num">CT202611180107</dd>
+          <dt>支付方式</dt><dd>支付宝（沙箱）· 交易号 2026111822001…3381</dd>
+          <dt>实付金额</dt><dd class="price">¥2650.00</dd>
+          <dt>交货方式</dt><dd>面交 · 廷根校区图书馆东门</dd>
+          <dt>买家留言</dt><dd>明天下午 3 点后有空</dd>
+        </dl>
+      </section>
+    </div>
+    <aside class="stack">
+      <section class="card card-pad">
+        <div class="row"><span class="avatar">陈</span><div style="flex:1"><b>数码小陈</b><div class="subtle">信用极好 96</div></div><a class="btn btn-outline btn-sm" href="chat.html">联系卖家</a></div>
+      </section>
+      <section class="card card-pad stack">
+        <h3 style="font-size:16px">订单动态</h3>
+        <ul class="timeline">
+          <li><span class="d"></span><div>卖家已交货<div class="subtle">11-19 15:10 · 数码小陈</div></div></li>
+          <li><span class="d"></span><div>支付成功<div class="subtle">11-18 20:33 · 支付宝回调</div></div></li>
+          <li><span class="d"></span><div>订单已提交<div class="subtle">11-18 20:31 · 林晓</div></div></li>
+        </ul>
+      </section>
+    </aside>
+  </div>
+</div></main>
+
+<div class="modal-mask" id="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="cf-title"><div class="modal" style="max-width:420px">
+  <div class="modal-head"><h3 id="cf-title">确认收货？</h3><button class="icon-btn" data-close aria-label="关闭"><i data-icon="x"></i></button></div>
+  <div class="modal-body"><p class="muted">确认后 <b class="price">¥2650.00</b> 将打入卖家的平台余额，无法再申请退款。请确认已检查商品没有问题。</p></div>
+  <div class="modal-foot"><button class="btn btn-outline" data-close>再看看</button><a class="btn btn-primary" href="review.html">确认收货</a></div>
+</div></div>
+
+<div class="modal-mask" id="refund-modal" role="dialog" aria-modal="true" aria-labelledby="rf-title"><div class="modal">
+  <div class="modal-head"><h3 id="rf-title">申请退款</h3><button class="icon-btn" data-close aria-label="关闭"><i data-icon="x"></i></button></div>
+  <div class="modal-body">
+    <div class="field"><label>退款原因<span class="req">*</span></label>
+      <div class="radio-group" data-single><button class="radio-card active">与描述不符</button><button class="radio-card">商品有质量问题</button><button class="radio-card">卖家未按约交货</button><button class="radio-card">其他</button></div></div>
+    <div class="field"><label for="rf-d">问题说明<span class="req">*</span></label><textarea id="rf-d" class="textarea" placeholder="说明具体问题，最多 200 字"></textarea></div>
+    <div class="field"><label>凭证图片<span class="req">*</span></label><div class="upload-grid"><div class="upload-slot"><span><i data-icon="upload"></i><br>上传</span></div></div></div>
+    <div class="alert alert-info"><i data-icon="scale"></i><span>卖家 48 小时内处理。卖家拒绝后你可以申请平台介入，由管理员裁决。售后期间暂停自动确认收货。</span></div>
+  </div>
+  <div class="modal-foot"><button class="btn btn-outline" data-close>取消</button><button class="btn btn-primary" data-close data-toast="退款申请已提交，等待卖家处理">提交申请</button></div>
+</div></div>
+<script src="assets/app.js"></script>
+</body>
+</html>

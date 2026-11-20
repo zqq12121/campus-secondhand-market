@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>商品审核 · 管理后台</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  mark { background: #FEE2E2; color: var(--danger); padding: 0 2px; border-radius: 3px; }
+  .goods-cell { display: flex; gap: 12px; align-items: center; min-width: 260px; }
+  .goods-cell .thumb { width: 52px; height: 52px; }
+  .goods-cell .thumb .icon { width: 24px; height: 24px; }
+</style>
+</head>
+<body data-page="audit">
+<div class="admin">
+  <div id="admin-side"></div>
+  <div class="admin-main">
+    <header class="admin-top"><h1 style="font-size:18px">商品审核</h1><div class="row"><span class="avatar avatar-sm">管</span><span class="hide-sm">admin</span></div></header>
+    <main class="admin-content">
+      <section class="card" data-tabs>
+        <div class="tabs" style="padding:0 16px">
+          <button class="tab active" data-tab="p">待审核<span class="count">12</span></button>
+          <button class="tab" data-tab="p">已通过</button><button class="tab" data-tab="p">已驳回</button><button class="tab" data-tab="p">全部商品</button>
+        </div>
+        <div class="toolbar">
+          <input class="input" placeholder="商品标题 / 卖家昵称" aria-label="搜索商品标题或卖家昵称">
+          <select class="select" aria-label="按分类筛选"><option>全部分类</option><option>教材书籍</option><option>数码电子</option></select>
+          <select class="select" aria-label="按进入审核原因筛选"><option>全部原因</option><option>命中敏感词</option><option>信用分低于 80</option></select>
+          <button class="btn btn-primary btn-sm">查询</button>
+          <span style="margin-left:auto" class="row"><button class="btn btn-outline btn-sm" data-toast="已批量通过 2 条">批量通过</button><button class="btn btn-danger-outline btn-sm" data-open="reject-modal">批量驳回</button></span>
+        </div>
+        <div class="tab-panel active table-wrap" data-panel="p">
+          <table class="table">
+            <thead><tr><th><input type="checkbox" aria-label="全选"></th><th>商品</th><th>卖家</th><th>价格</th><th>进入审核原因</th><th>提交时间</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td><input type="checkbox" aria-label="选择"></td><td><div class="goods-cell"><span class="thumb tint-2"><i data-icon="phone"></i></span><div>二手手机 9 成新<div class="subtle">描述：要的加 <mark>微信</mark> 详聊…</div></div></div></td>
+                <td>阿强<div class="subtle">信用 72</div></td><td class="price">¥899</td><td><span class="tag tag-red">命中敏感词：微信</span></td><td class="subtle">11-19 14:22</td>
+                <td><div class="ops"><button class="btn btn-primary btn-sm" data-toast="已通过，商品上架">通过</button><button class="btn btn-danger-outline btn-sm" data-open="reject-modal">驳回</button></div></td></tr>
+              <tr><td><input type="checkbox" aria-label="选择"></td><td><div class="goods-cell"><span class="thumb tint-3"><i data-icon="cup"></i></span><div>宿舍小台灯 三档调光<div class="subtle">毕业清仓，自提</div></div></div></td>
+                <td>大四学姐<div class="subtle">信用 78</div></td><td class="price">¥15</td><td><span class="tag tag-yellow">信用分低于 80</span></td><td class="subtle">11-19 10:20</td>
+                <td><div class="ops"><button class="btn btn-primary btn-sm" data-toast="已通过，商品上架">通过</button><button class="btn btn-danger-outline btn-sm" data-open="reject-modal">驳回</button></div></td></tr>
+              <tr><td><input type="checkbox" aria-label="选择"></td><td><div class="goods-cell"><span class="thumb tint-1"><i data-icon="book"></i></span><div>英语四级真题 带<mark>答案</mark><div class="subtle">近 10 年真题</div></div></div></td>
+                <td>小鱼<div class="subtle">信用 80</div></td><td class="price">¥12</td><td><span class="tag tag-red">命中敏感词：答案</span></td><td class="subtle">11-19 09:05</td>
+                <td><div class="ops"><button class="btn btn-primary btn-sm" data-toast="已通过，商品上架">通过</button><button class="btn btn-danger-outline btn-sm" data-open="reject-modal">驳回</button></div></td></tr>
+              <tr><td><input type="checkbox" aria-label="选择"></td><td><div class="goods-cell"><span class="thumb tint-4"><i data-icon="headphones"></i></span><div>蓝牙耳机 九成新<div class="subtle">先付 <mark>定金</mark> 再发货</div></div></div></td>
+                <td>阿峰<div class="subtle">信用 66</div></td><td class="price">¥120</td><td><span class="tag tag-red">命中敏感词：定金</span></td><td class="subtle">11-19 08:47</td>
+                <td><div class="ops"><button class="btn btn-primary btn-sm" data-toast="已通过，商品上架">通过</button><button class="btn btn-danger-outline btn-sm" data-open="reject-modal">驳回</button></div></td></tr>
+              <tr><td><input type="checkbox" aria-label="选择"></td><td><div class="goods-cell"><span class="thumb tint-6"><i data-icon="bike"></i></span><div>二手电动车 续航 40km<div class="subtle">带充电器，廷根自提</div></div></div></td>
+                <td>赵同学<div class="subtle">信用 75</div></td><td class="price">¥780</td><td><span class="tag tag-yellow">信用分低于 80</span></td><td class="subtle">11-19 08:30</td>
+                <td><div class="ops"><button class="btn btn-primary btn-sm" data-toast="已通过，商品上架">通过</button><button class="btn btn-danger-outline btn-sm" data-open="reject-modal">驳回</button></div></td></tr>
+              <tr><td><input type="checkbox" aria-label="选择"></td><td><div class="goods-cell"><span class="thumb tint-1"><i data-icon="book"></i></span><div>期末复习资料 打包<div class="subtle">含往年 <mark>代考</mark> 联系方式</div></div></div></td>
+                <td>匿名用户<div class="subtle">信用 80</div></td><td class="price">¥30</td><td><span class="tag tag-red">命中敏感词：代考</span></td><td class="subtle">11-18 23:16</td>
+                <td><div class="ops"><button class="btn btn-primary btn-sm" data-toast="已通过，商品上架">通过</button><button class="btn btn-danger-outline btn-sm" data-open="reject-modal">驳回</button></div></td></tr>
+              <tr><td><input type="checkbox" aria-label="选择"></td><td><div class="goods-cell"><span class="thumb tint-5"><i data-icon="shirt"></i></span><div>冬季羽绒服 L 码<div class="subtle">只穿过一个冬天</div></div></div></td>
+                <td>小雪<div class="subtle">信用 70</div></td><td class="price">¥150</td><td><span class="tag tag-yellow">信用分低于 80</span></td><td class="subtle">11-18 21:02</td>
+                <td><div class="ops"><button class="btn btn-primary btn-sm" data-toast="已通过，商品上架">通过</button><button class="btn btn-danger-outline btn-sm" data-open="reject-modal">驳回</button></div></td></tr>
+              <tr><td><input type="checkbox" aria-label="选择"></td><td><div class="goods-cell"><span class="thumb tint-2"><i data-icon="laptop"></i></span><div>游戏本 3060 显卡<div class="subtle">私聊 <mark>QQ</mark> 看实拍</div></div></div></td>
+                <td>键盘侠<div class="subtle">信用 82</div></td><td class="price">¥4200</td><td><span class="tag tag-red">命中敏感词：QQ</span></td><td class="subtle">11-18 19:40</td>
+                <td><div class="ops"><button class="btn btn-primary btn-sm" data-toast="已通过，商品上架">通过</button><button class="btn btn-danger-outline btn-sm" data-open="reject-modal">驳回</button></div></td></tr>
+              <tr><td><input type="checkbox" aria-label="选择"></td><td><div class="goods-cell"><span class="thumb tint-3"><i data-icon="cup"></i></span><div>宿舍小电锅 1.2L<div class="subtle">低功率，宿舍可用</div></div></div></td>
+                <td>干饭人<div class="subtle">信用 68</div></td><td class="price">¥35</td><td><span class="tag tag-yellow">信用分低于 80</span></td><td class="subtle">11-18 17:25</td>
+                <td><div class="ops"><button class="btn btn-primary btn-sm" data-toast="已通过，商品上架">通过</button><button class="btn btn-danger-outline btn-sm" data-open="reject-modal">驳回</button></div></td></tr>
+              <tr><td><input type="checkbox" aria-label="选择"></td><td><div class="goods-cell"><span class="thumb tint-1"><i data-icon="book"></i></span><div>雅思 剑桥真题 14–18<div class="subtle">有少量笔记</div></div></div></td>
+                <td>备考中<div class="subtle">信用 76</div></td><td class="price">¥80</td><td><span class="tag tag-yellow">信用分低于 80</span></td><td class="subtle">11-18 15:08</td>
+                <td><div class="ops"><button class="btn btn-primary btn-sm" data-toast="已通过，商品上架">通过</button><button class="btn btn-danger-outline btn-sm" data-open="reject-modal">驳回</button></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="between" style="padding:16px 24px"><span class="subtle">共 12 条</span><div class="row"><button class="btn btn-outline btn-sm" disabled>上一页</button><span class="num">1 / 2</span><button class="btn btn-outline btn-sm">下一页</button></div></div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div class="modal-mask" id="reject-modal" role="dialog" aria-modal="true" aria-labelledby="rj-title"><div class="modal">
+  <div class="modal-head"><h3 id="rj-title">驳回商品</h3><button class="icon-btn" data-close aria-label="关闭"><i data-icon="x"></i></button></div>
+  <div class="modal-body">
+    <div class="field"><label>常用原因</label><div class="radio-group" data-single><button class="radio-card active">含站外联系方式</button><button class="radio-card">禁售品</button><button class="radio-card">图片与描述不符</button><button class="radio-card">其他</button></div></div>
+    <div class="field"><label for="rj">驳回说明<span class="req">*</span></label><textarea id="rj" class="textarea">描述中含站外联系方式，请删除后重新提交。</textarea><span class="hint">将通过站内通知发给卖家</span></div>
+  </div>
+  <div class="modal-foot"><button class="btn btn-outline" data-close>取消</button><button class="btn btn-danger" data-close data-toast="已驳回并通知卖家">确认驳回</button></div>
+</div></div>
+<script src="../assets/app.js"></script>
+</body>
+</html>

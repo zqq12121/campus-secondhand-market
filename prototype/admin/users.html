@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>用户管理 · 管理后台</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-page="users">
+<div class="admin">
+  <div id="admin-side"></div>
+  <div class="admin-main">
+    <header class="admin-top"><h1 style="font-size:18px">用户管理</h1><div class="row"><span class="avatar avatar-sm">管</span><span class="hide-sm">admin</span></div></header>
+    <main class="admin-content">
+      <section class="card">
+        <div class="toolbar">
+          <input class="input" placeholder="邮箱 / 昵称" aria-label="搜索邮箱或昵称">
+          <select class="select" aria-label="按校区筛选"><option>全部校区</option><option>贝克兰德</option><option>廷根</option></select>
+          <select class="select" aria-label="按账号状态筛选"><option>全部状态</option><option>正常</option><option>禁言</option><option>封禁</option></select>
+          <select class="select" aria-label="按信用分筛选"><option>信用分不限</option><option>低于 60</option><option>低于 40</option></select>
+          <button class="btn btn-primary btn-sm">查询</button>
+        </div>
+        <div class="table-wrap"><table class="table">
+          <thead><tr><th>用户</th><th>校区 / 学院</th><th>信用分</th><th>在售 / 成交</th><th>状态</th><th>注册时间</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr><td><div class="row"><span class="avatar avatar-sm">陈</span><div>数码小陈<div class="subtle">chenxx21@wu.edu.cn</div></div></div></td><td>廷根<div class="subtle">计算机学院</div></td><td><span class="tag tag-green num">96</span></td><td class="num">6 / 37</td><td><span class="tag tag-green">正常</span></td><td class="subtle">2025-09-03</td>
+              <td><div class="ops"><button class="btn btn-outline btn-sm" data-open="credit-modal">调整信用分</button><button class="btn btn-danger-outline btn-sm" data-open="ban-modal">处罚</button></div></td></tr>
+            <tr><td><div class="row"><span class="avatar avatar-sm">强</span><div>阿强<div class="subtle">qiangw23@wu.edu.cn</div></div></div></td><td>贝克兰德<div class="subtle">机械学院</div></td><td><span class="tag tag-yellow num">72</span></td><td class="num">3 / 5</td><td><span class="tag tag-yellow">禁言至 11-26</span></td><td class="subtle">2026-03-11</td>
+              <td><div class="ops"><button class="btn btn-outline btn-sm" data-toast="已解除禁言">解除</button><button class="btn btn-danger-outline btn-sm" data-open="ban-modal">处罚</button></div></td></tr>
+            <tr><td><div class="row"><span class="avatar avatar-sm">骗</span><div>低价出 iPhone<div class="subtle">zhangs24@wu.edu.cn</div></div></div></td><td>廷根<div class="subtle">经管学院</div></td><td><span class="tag tag-red num">35</span></td><td class="num">0 / 1</td><td><span class="tag tag-red">永久封禁</span></td><td class="subtle">2026-10-28</td>
+              <td><div class="ops"><button class="btn btn-outline btn-sm" data-toast="已解封">解封</button></div></td></tr>
+          </tbody>
+        </table></div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div class="modal-mask" id="ban-modal" role="dialog" aria-modal="true" aria-labelledby="bn-title"><div class="modal">
+  <div class="modal-head"><h3 id="bn-title">处罚用户</h3><button class="icon-btn" data-close aria-label="关闭"><i data-icon="x"></i></button></div>
+  <div class="modal-body">
+    <div class="field"><label>处罚类型</label><div class="radio-group" data-single><button class="radio-card active">禁言</button><button class="radio-card">封禁</button></div></div>
+    <div class="field"><label>时长</label><div class="radio-group" data-single><button class="radio-card active">7 天</button><button class="radio-card">30 天</button><button class="radio-card">永久</button></div></div>
+    <div class="field"><label for="bn-r">原因<span class="req">*</span></label><textarea id="bn-r" class="textarea" style="min-height:80px"></textarea></div>
+    <div class="alert alert-warn"><i data-icon="alert"></i><span>封禁后该用户立即被踢下线，在售商品全部下架。</span></div>
+  </div>
+  <div class="modal-foot"><button class="btn btn-outline" data-close>取消</button><button class="btn btn-danger" data-close data-toast="处罚已生效">确认处罚</button></div>
+</div></div>
+
+<div class="modal-mask" id="credit-modal" role="dialog" aria-modal="true" aria-labelledby="cr-title"><div class="modal" style="max-width:420px">
+  <div class="modal-head"><h3 id="cr-title">调整信用分</h3><button class="icon-btn" data-close aria-label="关闭"><i data-icon="x"></i></button></div>
+  <div class="modal-body">
+    <p class="muted">当前信用分 <b class="num">96</b></p>
+    <div class="field"><label for="cr-v">调整值<span class="req">*</span></label><input id="cr-v" class="input" placeholder="正数加分，负数扣分，例如 -5"></div>
+    <div class="field"><label for="cr-r">原因<span class="req">*</span></label><input id="cr-r" class="input" placeholder="将记入信用分流水并通知用户"></div>
+  </div>
+  <div class="modal-foot"><button class="btn btn-outline" data-close>取消</button><button class="btn btn-primary" data-close data-toast="信用分已调整">确认</button></div>
+</div></div>
+<script src="../assets/app.js"></script>
+</body>
+</html>

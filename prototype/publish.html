@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>发布闲置 · WU 校园闲置</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .form-wrap { max-width: 820px; margin: 0 auto; }
+  .form-section { padding: 24px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 18px; }
+  .form-section:last-of-type { border-bottom: 0; }
+  .form-section h3 { font-size: 16px; }
+  .counter { align-self: flex-end; font-size: 12px; color: var(--text-3); font-family: var(--font-num); }
+  .price-input { position: relative; }
+  .price-input span { position: absolute; left: 14px; top: 10px; color: var(--text-2); font-family: var(--font-num); }
+  .price-input .input { padding-left: 32px; font-family: var(--font-num); }
+  .form-foot { position: sticky; bottom: 0; background: #fff; border-top: 1px solid var(--border); padding: 16px 24px; display: flex; justify-content: flex-end; gap: 10px; border-radius: 0 0 16px 16px; }
+  @media (max-width: 768px) { .form-section { padding: 16px; } .form-foot { bottom: 64px; padding: 12px 16px; } .form-foot .btn { flex: 1; } }
+</style>
+</head>
+<body data-page="publish">
+<div id="site-header"></div>
+<main class="page"><div class="container form-wrap stack">
+  <div class="between"><h1 class="section-title">发布闲置</h1><span class="subtle">今日还可发布 18 件 · 在售上限 50 件</span></div>
+
+  <form class="card" onsubmit="return false">
+    <div class="form-section">
+      <h3>商品图片 <span class="subtle" style="font-weight:400">1–9 张，单张不超过 5MB，第一张为封面</span></h3>
+      <div class="upload-grid">
+        <div class="upload-slot filled tint-2"><i data-icon="phone" class="icon-lg"></i><span class="cover-tag">封面</span></div>
+        <div class="upload-slot filled tint-1"><i data-icon="image" class="icon-lg"></i></div>
+        <div class="upload-slot filled tint-4"><i data-icon="image" class="icon-lg"></i></div>
+        <label class="upload-slot"><span><i data-icon="upload"></i><br>添加图片<br>3/9</span><input type="file" accept="image/jpeg,image/png,image/webp" multiple hidden></label>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h3>基本信息</h3>
+      <div class="field"><label for="p-title">标题<span class="req">*</span></label>
+        <input id="p-title" class="input" maxlength="30" value="iPad Air 5 64G 蓝色 带笔 电池健康 92%"><span class="counter">28/30</span></div>
+      <div class="field"><label for="p-desc">描述<span class="req">*</span></label>
+        <textarea id="p-desc" class="textarea" maxlength="1000" placeholder="说说购买时间、使用情况、有无瑕疵、配件、转手原因…"></textarea><span class="counter">0/1000</span></div>
+      <div class="grid-2">
+        <div class="field"><label for="p-cat1">分类<span class="req">*</span></label>
+          <select id="p-cat1" class="select"><option>数码电子</option><option>教材书籍</option><option>生活用品</option><option>服饰鞋包</option><option>运动出行</option><option>其他</option></select></div>
+        <div class="field"><label for="p-cat2">子分类<span class="req">*</span></label>
+          <select id="p-cat2" class="select"><option>手机平板</option><option>电脑配件</option><option>耳机音箱</option></select></div>
+      </div>
+      <div class="field"><label>成色<span class="req">*</span></label>
+        <div class="radio-group" data-single>
+          <button type="button" class="radio-card">全新</button><button type="button" class="radio-card active">几乎全新</button><button type="button" class="radio-card">轻微使用</button><button type="button" class="radio-card">明显使用</button>
+        </div></div>
+    </div>
+
+    <div class="form-section">
+      <h3>价格与库存</h3>
+      <div class="grid-2">
+        <div class="field"><label for="p-price">售价<span class="req">*</span></label>
+          <div class="price-input"><span>¥</span><input id="p-price" class="input" value="2650"></div>
+          <span class="hint">0.01–99999 元；填 0 即为「免费送」，只能面交</span></div>
+        <div class="field"><label for="p-orig">原价</label>
+          <div class="price-input"><span>¥</span><input id="p-orig" class="input" value="4399"></div></div>
+      </div>
+      <div class="field" style="max-width:200px"><label for="p-stock">数量</label><input id="p-stock" class="input" type="number" min="1" value="1"></div>
+    </div>
+
+    <div class="form-section">
+      <h3>交易方式</h3>
+      <div class="radio-group" data-single>
+        <button type="button" class="radio-card"><i data-icon="pin"></i>仅面交</button>
+        <button type="button" class="radio-card"><i data-icon="shield"></i>仅担保</button>
+        <button type="button" class="radio-card active"><i data-icon="check"></i>面交和担保都支持</button>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label for="p-campus">面交校区<span class="req">*</span></label>
+          <select id="p-campus" class="select"><option>廷根</option><option>贝克兰德</option></select></div>
+        <div class="field"><label for="p-loc">面交地点</label><input id="p-loc" class="input" value="图书馆东门"></div>
+      </div>
+      <div class="alert alert-info"><i data-icon="shield"></i><span>担保交易：买家付款到平台，你交货、买家确认收货后，钱进入你的平台余额。信用分低于 60 不能使用担保交易。</span></div>
+    </div>
+
+    <div class="form-foot">
+      <button class="btn btn-outline" data-toast="已存入草稿箱">存草稿</button>
+      <button class="btn btn-primary" data-toast="已提交，审核通过后上架（信用分 ≥ 80 且未命中敏感词直接上架）">提交发布</button>
+    </div>
+  </form>
+</div></main>
+<script src="assets/app.js"></script>
+</body>
+</html>

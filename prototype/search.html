@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>搜索结果 · WU 校园闲置</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .filter-box { padding: 8px 24px; }
+  .filter-row { display: flex; gap: 16px; padding: 12px 0; border-bottom: 1px dashed var(--border); align-items: flex-start; }
+  .filter-row:last-child { border-bottom: 0; }
+  .filter-row > b { width: 72px; flex: none; font-size: 14px; color: var(--text-2); padding-top: 6px; }
+  .filter-row .opts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .filter-row .chip { height: 30px; font-size: 13px; }
+  .price-range { display: flex; align-items: center; gap: 6px; }
+  .price-range .input { width: 90px; height: 30px; font-size: 13px; }
+  .hot { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  @media (max-width: 768px) {
+    .filter-box { padding: 4px 16px; }
+    .filter-row { flex-direction: column; gap: 8px; }
+    .filter-row .opts { flex-wrap: nowrap; overflow-x: auto; width: 100%; }
+  }
+</style>
+</head>
+<body data-page="search">
+<div id="site-header"></div>
+<main class="page"><div class="container stack">
+
+  <div class="hot subtle">热搜：
+    <a class="tag" href="search.html?q=高等数学">高等数学</a><a class="tag" href="search.html?q=iPad">iPad</a><a class="tag" href="search.html?q=自行车">自行车</a><a class="tag" href="search.html?q=考研资料">考研资料</a><a class="tag" href="search.html?q=台灯">台灯</a>
+  </div>
+
+  <section class="card filter-box" aria-label="筛选条件">
+    <div class="filter-row"><b>分类</b><div class="opts" data-single>
+      <button class="chip">全部</button><button class="chip active">教材书籍</button><button class="chip">数码电子</button><button class="chip">生活用品</button><button class="chip">服饰鞋包</button><button class="chip">运动出行</button><button class="chip">其他</button></div></div>
+    <div class="filter-row"><b>子分类</b><div class="opts" data-single>
+      <button class="chip active">不限</button><button class="chip">专业教材</button><button class="chip">考研考证</button><button class="chip">课外读物</button></div></div>
+    <div class="filter-row"><b>校区</b><div class="opts" data-single>
+      <button class="chip active">不限</button><button class="chip">贝克兰德</button><button class="chip">廷根</button></div></div>
+    <div class="filter-row"><b>成色</b><div class="opts" data-single>
+      <button class="chip active">不限</button><button class="chip">全新</button><button class="chip">几乎全新</button><button class="chip">轻微使用</button><button class="chip">明显使用</button></div></div>
+    <div class="filter-row"><b>交易方式</b><div class="opts" data-single>
+      <button class="chip active">不限</button><button class="chip">支持面交</button><button class="chip">支持担保</button></div></div>
+    <div class="filter-row"><b>价格</b><div class="price-range">
+      <input class="input" placeholder="¥ 最低" aria-label="最低价"> — <input class="input" placeholder="¥ 最高" aria-label="最高价">
+      <button class="btn btn-outline btn-sm">确定</button></div></div>
+  </section>
+
+  <div class="between">
+    <p class="muted">「<b style="color:var(--text)">高等数学</b>」共找到 <b class="num" style="color:var(--text)">36</b> 件商品</p>
+    <div class="tabs" style="border:0" data-single>
+      <button class="chip active">综合</button><button class="chip">最新</button><button class="chip">价格 ↑</button><button class="chip">价格 ↓</button>
+    </div>
+  </div>
+
+  <div class="goods-grid" data-goods="0,8"></div>
+</div></main>
+<script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>评价交易 · WU 校园闲置</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .wrap { max-width: 640px; margin: 0 auto; }
+  .rate { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .rate .radio-card { flex-direction: column; justify-content: center; padding: 16px; gap: 6px; }
+  .rate .radio-card.bad.active { border-color: var(--danger); background: var(--danger-soft); color: var(--danger); }
+  .rate .radio-card.mid.active { border-color: var(--warning); background: var(--warning-soft); color: var(--warning); }
+</style>
+</head>
+<body data-page="me">
+<div id="site-header"></div>
+<main class="page"><div class="container wrap stack">
+  <div class="alert alert-green"><i data-icon="check"></i><span>交易已完成，钱已打给卖家。评价后可帮助其他同学判断。</span></div>
+
+  <section class="card">
+    <div class="list-item"><span class="thumb tint-2"><i data-icon="phone"></i></span><div style="flex:1">iPad Air 5 64G 蓝色 带笔<div class="subtle">评价卖家：数码小陈 · 15 天内可评价，到期未评默认好评</div></div></div>
+    <div class="card-pad stack" style="padding-top:8px">
+      <div class="field"><label>总体评价<span class="req">*</span></label>
+        <div class="rate radio-group" data-single>
+          <button class="radio-card active"><i data-icon="star" class="icon-lg"></i>好评</button>
+          <button class="radio-card mid"><i data-icon="star" class="icon-lg"></i>中评</button>
+          <button class="radio-card bad"><i data-icon="star" class="icon-lg"></i>差评</button>
+        </div></div>
+      <div class="field"><label>印象标签</label>
+        <div class="row" style="flex-wrap:wrap">
+          <button class="chip active" onclick="this.classList.toggle('active')">描述相符</button>
+          <button class="chip active" onclick="this.classList.toggle('active')">准时赴约</button>
+          <button class="chip" onclick="this.classList.toggle('active')">回复及时</button>
+          <button class="chip" onclick="this.classList.toggle('active')">态度友好</button>
+          <button class="chip" onclick="this.classList.toggle('active')">包装用心</button>
+        </div></div>
+      <div class="field"><label for="rv">评价内容</label><textarea id="rv" class="textarea" maxlength="200" placeholder="说说这次交易的感受（选填，最多 200 字）">机器和描述一致，卖家很耐心地等我验机。</textarea></div>
+      <div class="alert alert-info"><i data-icon="lock"></i><span>双方都评价后或 15 天到期后评价才会公开，公开后不能修改。</span></div>
+      <a class="btn btn-primary btn-lg btn-block" href="orders.html">提交评价</a>
+    </div>
+  </section>
+</div></main>
+<script src="assets/app.js"></script>
+</body>
+</html>

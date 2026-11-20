@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>数据看板 · 管理后台</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  .todo { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .todo a { display: flex; align-items: center; gap: 12px; padding: 16px; border-radius: 12px; border: 1px solid var(--border); transition: border-color .15s; }
+  .todo a:hover { border-color: var(--primary); }
+  .todo .ic { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; }
+  .bar-row { display: grid; grid-template-columns: 72px 1fr 48px; gap: 10px; align-items: center; font-size: 14px; }
+  .bar { height: 10px; border-radius: 999px; background: #F1F5F9; overflow: hidden; }
+  .bar span { display: block; height: 100%; background: var(--primary); border-radius: 999px; }
+  .legend { display: flex; gap: 16px; font-size: 13px; color: var(--text-2); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+  @media (max-width: 768px) { .todo { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body data-page="dashboard">
+<div class="admin">
+  <div id="admin-side"></div>
+  <div class="admin-main">
+    <header class="admin-top"><h1 style="font-size:18px">数据看板</h1><div class="row"><span class="subtle hide-sm">数据每小时更新 · 最近 15:00</span><span class="avatar avatar-sm">管</span><span class="hide-sm">admin</span></div></header>
+    <main class="admin-content">
+      <section class="stats-grid">
+        <div class="card card-pad stat"><span class="l">今日新增用户</span><span class="v">38</span><span class="d up">较昨日 +12%</span></div>
+        <div class="card card-pad stat"><span class="l">今日新增商品</span><span class="v">126</span><span class="d up">较昨日 +8%</span></div>
+        <div class="card card-pad stat"><span class="l">今日订单</span><span class="v">54</span><span class="d down">较昨日 −5%</span></div>
+        <div class="card card-pad stat"><span class="l">今日成交额（元）</span><span class="v">8,932</span><span class="d up">较昨日 +21%</span></div>
+      </section>
+
+      <section class="card card-pad stack">
+        <h3 style="font-size:16px">待处理</h3>
+        <div class="todo">
+          <a href="audit.html"><span class="ic tint-3"><i data-icon="audit"></i></span><span><b class="num" style="font-size:20px">12</b><br><span class="subtle">商品待审核</span></span></a>
+          <a href="disputes.html"><span class="ic tint-5"><i data-icon="scale"></i></span><span><b class="num" style="font-size:20px">3</b><br><span class="subtle">纠纷待裁决</span></span></a>
+          <a href="reports.html"><span class="ic tint-2"><i data-icon="flag"></i></span><span><b class="num" style="font-size:20px">5</b><br><span class="subtle">举报待处理</span></span></a>
+          <a href="users.html"><span class="ic tint-6"><i data-icon="ban"></i></span><span><b class="num" style="font-size:20px">2</b><br><span class="subtle">封禁即将到期</span></span></a>
+        </div>
+      </section>
+
+      <div class="layout-main-aside">
+        <section class="card card-pad stack">
+          <div class="between"><h3 style="font-size:16px">近 14 天订单与成交额</h3>
+            <div class="legend"><span><i style="background:var(--primary-border)"></i>订单数</span><span><i style="background:var(--price)"></i>成交额（元）</span></div></div>
+          <div id="chart" role="img" aria-label="近 14 天订单数与成交额趋势"></div>
+        </section>
+        <section class="card card-pad stack">
+          <h3 style="font-size:16px">在售商品分类占比</h3>
+          <div class="bar-row"><span>教材书籍</span><span class="bar"><span style="width:34%"></span></span><span class="num subtle">34%</span></div>
+          <div class="bar-row"><span>数码电子</span><span class="bar"><span style="width:26%"></span></span><span class="num subtle">26%</span></div>
+          <div class="bar-row"><span>生活用品</span><span class="bar"><span style="width:19%"></span></span><span class="num subtle">19%</span></div>
+          <div class="bar-row"><span>服饰鞋包</span><span class="bar"><span style="width:10%"></span></span><span class="num subtle">10%</span></div>
+          <div class="bar-row"><span>运动出行</span><span class="bar"><span style="width:7%"></span></span><span class="num subtle">7%</span></div>
+          <div class="bar-row"><span>其他</span><span class="bar"><span style="width:4%"></span></span><span class="num subtle">4%</span></div>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+<script src="../assets/app.js"></script>
+<script>
+  // 原型假数据：近 14 天订单数与成交额
+  const days = ['11-06','11-07','11-08','11-09','11-10','11-11','11-12','11-13','11-14','11-15','11-16','11-17','11-18','11-19'];
+  const orders = [31, 28, 35, 42, 39, 61, 47, 44, 40, 52, 58, 49, 57, 54];
+  const gmv = [4200, 3900, 5100, 6800, 5900, 11200, 7300, 6600, 5800, 8100, 9400, 7200, 7400, 8932];
+  const TICKS = 4; // 纵轴等分数（5 条刻度线）
+
+  // 把 max / TICKS 向上取到「好看的数」（1、2、2.5、3、4、5 × 10^n），返回 [轴最大值, 步长]
+  function niceAxis(max) {
+    const raw = max / TICKS, mag = 10 ** Math.floor(Math.log10(raw));
+    const step = [1, 2, 2.5, 3, 4, 5, 10].map((m) => m * mag).find((v) => v >= raw);
+    return [step * TICKS, step];
+  }
+  const [oMax, oStep] = niceAxis(Math.max(...orders));
+  const [gMax, gStep] = niceAxis(Math.max(...gmv));
+  const fmtK = (v) => (v === 0 ? '0' : `${+(v / 1000).toFixed(1)}k`);
+
+  function draw() {
+    const box = document.getElementById('chart');
+    const W = 720;
+    // SVG 会按容器宽度缩放；按实际缩放比例反推字号，保证渲染后不小于 12px
+    const fs = Math.max(12, 12 * W / box.clientWidth);
+    const L = Math.max(40, fs * 2.8), R = Math.max(52, fs * 3.2), T = 16, B = fs * 2.4;
+    const H = 230 + B, iw = W - L - R, ih = H - T - B, bw = iw / days.length;
+    const x = (i) => L + bw * i + bw / 2;
+    const yo = (v) => T + ih - (v / oMax) * ih, yg = (v) => T + ih - (v / gMax) * ih;
+    // 横轴标签间隔：保证相邻日期标签不重叠（每个约 5 个字符宽）
+    const every = Math.ceil((fs * 3.2) / bw);
+    let s = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" font-size="${fs}" fill="var(--text-3)">`;
+    for (let k = 0; k <= TICKS; k++) {
+      const y = T + ih - (k / TICKS) * ih;
+      s += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="#EEF2F0"/><text x="${L - 8}" y="${y + fs / 3}" text-anchor="end">${oStep * k}</text><text x="${W - R + 8}" y="${y + fs / 3}">${fmtK(gStep * k)}</text>`;
+    }
+    orders.forEach((v, i) => { s += `<rect x="${x(i) - bw * 0.3}" y="${yo(v)}" width="${bw * 0.6}" height="${T + ih - yo(v)}" rx="3" fill="#A7F3D0"><title>${days[i]} 订单 ${v}</title></rect>`; });
+    s += `<polyline fill="none" stroke="#C2410C" stroke-width="2" points="${gmv.map((v, i) => `${x(i)},${yg(v)}`).join(' ')}"/>`;
+    gmv.forEach((v, i) => { s += `<circle cx="${x(i)}" cy="${yg(v)}" r="3" fill="#fff" stroke="#C2410C" stroke-width="2"><title>${days[i]} 成交额 ¥${v}</title></circle>`; });
+    days.forEach((d, i) => { if ((days.length - 1 - i) % every === 0) s += `<text x="${x(i)}" y="${H - fs * 0.8}" text-anchor="middle">${d}</text>`; });
+    box.innerHTML = s + '</svg>';
+  }
+  draw();
+  window.addEventListener('resize', draw);
+</script>
+</body>
+</html>

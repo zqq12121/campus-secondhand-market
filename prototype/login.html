@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>登录 / 注册 · WU 校园闲置</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  body { padding-bottom: 0; }
+  .auth { min-height: 100vh; display: grid; grid-template-columns: 1fr 1fr; }
+  .auth-side { background: linear-gradient(150deg, #047857, #10B981); color: #fff; padding: 48px; display: flex; flex-direction: column; justify-content: space-between; }
+  .auth-side .logo { color: #fff; }
+  .auth-side .logo-mark { background: #fff; color: var(--primary); }
+  .auth-side h1 { font-size: 34px; margin-bottom: 16px; }
+  .auth-side li { display: flex; gap: 10px; align-items: center; margin-top: 12px; }
+  .auth-side ul { list-style: none; padding: 0; margin: 0; opacity: .95; }
+  .auth-main { display: grid; place-items: center; padding: 32px 16px; min-width: 0; }
+  .auth-box { width: 100%; max-width: 400px; }
+  .suffix { display: flex; align-items: center; border: 1px solid var(--border); border-radius: var(--radius); background: #fff; overflow: hidden; }
+  .suffix:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(4,120,87,.15); }
+  .suffix input { flex: 1; border: 0; outline: 0; height: 44px; padding: 0 14px; min-width: 0; }
+  .suffix span { padding: 0 14px; color: var(--text-2); background: #F8FAFC; height: 44px; display: grid; place-items: center; border-left: 1px solid var(--border); }
+  @media (max-width: 768px) { .auth { grid-template-columns: 1fr; } .auth-side { display: none; } }
+</style>
+</head>
+<body>
+<div class="auth">
+  <aside class="auth-side">
+    <a class="logo" href="home.html"><span class="logo-mark"><i data-icon="package"></i></span>WU 校园闲置</a>
+    <div>
+      <h1>只属于 WU 同学的<br>二手交易平台</h1>
+      <ul>
+        <li><i data-icon="shield"></i>校园邮箱注册，人人实名在校</li>
+        <li><i data-icon="pin"></i>贝克兰德、廷根两校区就近面交</li>
+        <li><i data-icon="wallet"></i>担保交易，确认收货后才打款</li>
+      </ul>
+    </div>
+    <p style="opacity:.8;font-size:13px">遇到问题请联系平台管理员</p>
+  </aside>
+
+  <main class="auth-main"><div class="auth-box card card-pad" data-tabs>
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-tab="login">登录</button>
+      <button class="tab" data-tab="register">注册</button>
+      <button class="tab" data-tab="forgot">找回密码</button>
+    </div>
+
+    <form class="tab-panel active stack mt-24" data-panel="login" onsubmit="location.href='home.html';return false">
+      <div class="field"><label for="l-email">校园邮箱</label>
+        <div class="suffix"><input id="l-email" placeholder="学号或邮箱前缀" autocomplete="username"><span>@wu.edu.cn</span></div></div>
+      <div class="field"><label for="l-pwd">密码</label>
+        <input id="l-pwd" class="input" type="password" placeholder="请输入密码" autocomplete="current-password"></div>
+      <button class="btn btn-primary btn-lg btn-block" type="submit">登录</button>
+      <p class="subtle" style="text-align:center">连续输错 5 次将锁定 15 分钟</p>
+    </form>
+
+    <form class="tab-panel stack mt-24" data-panel="register" onsubmit="location.href='home.html';return false">
+      <div class="field"><label for="r-email">校园邮箱<span class="req">*</span></label>
+        <div class="suffix"><input id="r-email" placeholder="邮箱前缀" value="linxiao2022"><span>@wu.edu.cn</span></div>
+        <span class="hint">只支持 @wu.edu.cn 邮箱，验证通过即完成学生认证</span></div>
+      <div class="field"><label for="r-code">邮箱验证码<span class="req">*</span></label>
+        <div class="input-group"><input id="r-code" class="input" placeholder="6 位验证码" maxlength="6">
+          <button class="btn btn-outline" type="button" data-toast="验证码已发送，5 分钟内有效">获取验证码</button></div></div>
+      <div class="field"><label for="r-nick">昵称<span class="req">*</span></label>
+        <input id="r-nick" class="input" placeholder="2–16 个字"></div>
+      <div class="field"><label>所在校区<span class="req">*</span></label>
+        <div class="radio-group" data-single>
+          <button type="button" class="radio-card active">贝克兰德</button>
+          <button type="button" class="radio-card">廷根</button>
+        </div></div>
+      <div class="field"><label for="r-pwd">设置密码<span class="req">*</span></label>
+        <input id="r-pwd" class="input is-error" type="password" value="123456" autocomplete="new-password">
+        <span class="error">密码需 8–20 位，且同时包含字母和数字</span></div>
+      <button class="btn btn-primary btn-lg btn-block" type="submit">注册并登录</button>
+    </form>
+
+    <form class="tab-panel stack mt-24" data-panel="forgot" onsubmit="return false">
+      <div class="field"><label for="f-email">校园邮箱</label>
+        <div class="suffix"><input id="f-email" placeholder="邮箱前缀"><span>@wu.edu.cn</span></div></div>
+      <div class="field"><label for="f-code">邮箱验证码</label>
+        <div class="input-group"><input id="f-code" class="input" placeholder="6 位验证码">
+          <button class="btn btn-outline" type="button" disabled>58 秒后重发</button></div></div>
+      <div class="field"><label for="f-pwd">新密码</label>
+        <input id="f-pwd" class="input" type="password" placeholder="8–20 位，含字母和数字"></div>
+      <button class="btn btn-primary btn-lg btn-block" data-toast="密码已重置，请重新登录">重置密码</button>
+    </form>
+  </div></main>
+</div>
+<script src="assets/app.js"></script>
+</body>
+</html>

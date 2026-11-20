@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>原型目录 · WU 校园闲置</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .pages { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+  .pages a { display: flex; gap: 12px; align-items: center; padding: 16px; transition: border-color .15s; }
+  .pages a:hover { border-color: var(--primary); }
+  .pages .ic { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; flex: none; }
+  .swatches { display: flex; flex-wrap: wrap; gap: 12px; }
+  .sw { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--text-2); }
+  .sw span:first-child { width: 96px; height: 56px; border-radius: 12px; border: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<main class="page"><div class="container stack">
+  <div><h1 style="font-size:26px">WU 校园闲置 · 高保真原型</h1>
+    <p class="muted mt-8">静态原型，数据为假数据，用于确认视觉与交互后再写 Vue 3 页面。设计规范见 design-system/campus-trade/MASTER.md。</p></div>
+
+  <section class="card card-pad stack">
+    <h2 class="section-title" style="font-size:17px">设计规范速览</h2>
+    <div class="swatches">
+      <div class="sw"><span style="background:var(--primary)"></span>主色 #047857</div>
+      <div class="sw"><span style="background:var(--primary-soft)"></span>主色浅 #ECFDF5</div>
+      <div class="sw"><span style="background:var(--price)"></span>价格/购买 #C2410C</div>
+      <div class="sw"><span style="background:var(--danger)"></span>危险 #DC2626</div>
+      <div class="sw"><span style="background:var(--bg)"></span>背景 #F5F7F6</div>
+      <div class="sw"><span style="background:var(--text)"></span>正文 #0F172A</div>
+    </div>
+    <div class="row" style="flex-wrap:wrap">
+      <button class="btn btn-primary">主按钮</button><button class="btn btn-buy">立即购买</button><button class="btn btn-outline">次按钮</button><button class="btn btn-ghost">文字按钮</button><button class="btn btn-danger-outline">危险操作</button>
+      <span class="tag tag-green">担保</span><span class="tag tag-orange">免费送</span><span class="tag tag-blue">待收货</span><span class="tag tag-yellow">审核中</span><span class="tag tag-red">已驳回</span>
+    </div>
+  </section>
+
+  <h2 class="section-title" style="font-size:17px">用户端（15 页）</h2>
+  <div class="pages">
+    <a class="card" href="home.html"><span class="ic tint-1"><i data-icon="home"></i></span><span><b>首页</b><br><span class="subtle">分类入口、最新发布、校区筛选</span></span></a>
+    <a class="card" href="login.html"><span class="ic tint-1"><i data-icon="lock"></i></span><span><b>登录 / 注册 / 找回密码</b><br><span class="subtle">@wu.edu.cn 邮箱，校区选择</span></span></a>
+    <a class="card" href="search.html"><span class="ic tint-2"><i data-icon="search"></i></span><span><b>搜索结果</b><br><span class="subtle">热搜、多维筛选、排序</span></span></a>
+    <a class="card" href="goods.html"><span class="ic tint-2"><i data-icon="package"></i></span><span><b>商品详情</b><br><span class="subtle">图集、卖家信用、举报弹窗</span></span></a>
+    <a class="card" href="publish.html"><span class="ic tint-3"><i data-icon="plus"></i></span><span><b>发布闲置</b><br><span class="subtle">多图上传、交易方式、草稿</span></span></a>
+    <a class="card" href="want.html"><span class="ic tint-3"><i data-icon="megaphone"></i></span><span><b>求购广场</b><br><span class="subtle">求购列表、发布求购弹窗</span></span></a>
+    <a class="card" href="chat.html"><span class="ic tint-4"><i data-icon="message"></i></span><span><b>聊天</b><br><span class="subtle">会话列表、商品卡片、风险提示</span></span></a>
+    <a class="card" href="checkout.html"><span class="ic tint-5"><i data-icon="wallet"></i></span><span><b>确认下单</b><br><span class="subtle">面交 / 担保二选一</span></span></a>
+    <a class="card" href="orders.html"><span class="ic tint-5"><i data-icon="file"></i></span><span><b>我的订单</b><br><span class="subtle">买到的 / 卖出的，按状态筛选</span></span></a>
+    <a class="card" href="order.html"><span class="ic tint-5"><i data-icon="shield"></i></span><span><b>订单详情（担保 · 待收货）</b><br><span class="subtle">进度条、确认收货、申请退款</span></span></a>
+    <a class="card" href="review.html"><span class="ic tint-6"><i data-icon="star"></i></span><span><b>评价交易</b><br><span class="subtle">好/中/差评、标签</span></span></a>
+    <a class="card" href="me.html"><span class="ic tint-6"><i data-icon="user"></i></span><span><b>个人中心</b><br><span class="subtle">信用分、余额、我的商品、编辑资料</span></span></a>
+    <a class="card" href="user.html"><span class="ic tint-6"><i data-icon="users"></i></span><span><b>他人主页</b><br><span class="subtle">在售商品、收到的评价</span></span></a>
+    <a class="card" href="notifications.html"><span class="ic tint-4"><i data-icon="bell"></i></span><span><b>消息通知</b><br><span class="subtle">交易、审核、求购匹配、系统</span></span></a>
+    <a class="card" href="announcement.html"><span class="ic tint-4"><i data-icon="megaphone"></i></span><span><b>公告详情</b><br><span class="subtle">平台公告正文</span></span></a>
+  </div>
+
+  <h2 class="section-title" style="font-size:17px">管理后台（8 页）</h2>
+  <div class="pages">
+    <a class="card" href="admin/login.html"><span class="ic tint-1"><i data-icon="lock"></i></span><span><b>后台登录</b></span></a>
+    <a class="card" href="admin/dashboard.html"><span class="ic tint-1"><i data-icon="dashboard"></i></span><span><b>数据看板</b><br><span class="subtle">核心指标、待处理、趋势图</span></span></a>
+    <a class="card" href="admin/audit.html"><span class="ic tint-3"><i data-icon="audit"></i></span><span><b>商品审核</b><br><span class="subtle">敏感词高亮、批量通过/驳回</span></span></a>
+    <a class="card" href="admin/users.html"><span class="ic tint-2"><i data-icon="users"></i></span><span><b>用户管理</b><br><span class="subtle">禁言/封禁、调整信用分</span></span></a>
+    <a class="card" href="admin/disputes.html"><span class="ic tint-5"><i data-icon="scale"></i></span><span><b>订单与纠纷</b><br><span class="subtle">纠纷裁决、订单查询</span></span></a>
+    <a class="card" href="admin/reports.html"><span class="ic tint-5"><i data-icon="flag"></i></span><span><b>举报处理</b></span></a>
+    <a class="card" href="admin/content.html"><span class="ic tint-6"><i data-icon="sliders"></i></span><span><b>内容运营</b><br><span class="subtle">分类、公告轮播、敏感词</span></span></a>
+    <a class="card" href="admin/system.html"><span class="ic tint-4"><i data-icon="lock"></i></span><span><b>权限与日志</b><br><span class="subtle">管理员、角色权限、操作日志</span></span></a>
+  </div>
+</div></main>
+<script src="assets/app.js"></script>
+</body>
+</html>

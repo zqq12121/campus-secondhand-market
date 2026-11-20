@@ -1,0 +1,98 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: campus-trade
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DB:campus_trade}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    listener:
+      simple:
+        # 消费失败不重回队列（超时处理有定时扫描兜底），避免毒消息死循环
+        default-requeue-rejected: false
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:465}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.ssl.enable: true
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+  jackson:
+    time-zone: Asia/Shanghai
+  mvc:
+    format:
+      date-time: yyyy-MM-dd HH:mm:ss
+      date: yyyy-MM-dd
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+app:
+  jwt:
+    user-secret: ${JWT_USER_SECRET}
+    admin-secret: ${JWT_ADMIN_SECRET}
+    user-ttl-seconds: 604800
+    admin-ttl-seconds: 43200
+  mail:
+    # false 时验证码只打印到日志，便于本地演示
+    enabled: ${MAIL_ENABLED:false}
+    from: ${MAIL_FROM:}
+  upload:
+    dir: ${UPLOAD_DIR:./uploads}
+    public-base-url: ${UPLOAD_PUBLIC_BASE_URL:http://localhost:8080/uploads}
+  admin-init:
+    username: ${ADMIN_INIT_USERNAME:}
+    password: ${ADMIN_INIT_PASSWORD:}
+  rules:
+    login-max-fail: 5
+    login-lock-minutes: 15
+    code-ttl-seconds: 300
+    code-resend-seconds: 60
+    max-on-sale: 50
+    daily-publish: 20
+    daily-publish-poor-credit: 3
+    goods-expire-days: 60
+    face-confirm-timeout: ${RULE_FACE_CONFIRM_TIMEOUT:24h}
+    face-auto-complete: ${RULE_FACE_AUTO_COMPLETE:7d}
+    pay-timeout: ${RULE_PAY_TIMEOUT:15m}
+    auto-confirm: ${RULE_AUTO_CONFIRM:7d}
+    after-sale-cancel-timeout: ${RULE_AFTER_SALE_CANCEL_TIMEOUT:24h}
+    after-sale-refund-timeout: ${RULE_AFTER_SALE_REFUND_TIMEOUT:48h}
+    after-sale-appeal-timeout: ${RULE_AFTER_SALE_APPEAL_TIMEOUT:48h}
+    review-days: 15
+    daily-cancel-limit: 5
+  pay:
+    # alipay：支付宝开放平台（沙箱）；mock：本地模拟收银台
+    mode: ${PAY_MODE:mock}
+    app-id: ${ALIPAY_APP_ID:}
+    private-key: ${ALIPAY_PRIVATE_KEY:}
+    alipay-public-key: ${ALIPAY_PUBLIC_KEY:}
+    gateway: ${ALIPAY_GATEWAY:https://openapi-sandbox.dl.alipaydev.com/gateway.do}
+    notify-url: ${ALIPAY_NOTIFY_URL:http://localhost:8080/api/pay/alipay/notify}
+    # 支付完成后跳回前端的订单页，{orderId} 会被替换
+    return-url: ${PAY_RETURN_URL:http://localhost:5180/order/{orderId}?from=alipay}

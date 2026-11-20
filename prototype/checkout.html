@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>确认下单 · WU 校园闲置</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .wrap { max-width: 760px; margin: 0 auto; }
+  .mode-card { flex: 1; flex-direction: column; align-items: flex-start; gap: 4px; padding: 16px; min-width: 220px; text-align: left; }
+  .mode-card .t { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+  .mode-card .d { font-size: 13px; color: var(--text-2); font-weight: 400; }
+  .qty { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: var(--radius); }
+  .qty button { width: 36px; height: 36px; border: 0; background: none; cursor: pointer; font-size: 18px; }
+  .qty span { width: 40px; text-align: center; font-family: var(--font-num); }
+  .total { position: sticky; bottom: 0; }
+</style>
+</head>
+<body data-page="checkout" class="no-tabbar">
+<div id="site-header"></div>
+<main class="page"><div class="container wrap stack">
+  <h1 class="section-title">确认下单</h1>
+
+  <section class="card">
+    <div class="list-item">
+      <span class="thumb tint-2"><i data-icon="phone"></i></span>
+      <div style="flex:1;min-width:0"><div>iPad Air 5 64G 蓝色 带笔 电池健康 92%</div><div class="subtle">卖家：数码小陈 · 廷根校区 · 几乎全新</div></div>
+      <span class="price" style="font-size:18px">¥2650</span>
+    </div>
+    <div class="list-item between"><span>数量</span><div class="qty"><button aria-label="减少">−</button><span>1</span><button aria-label="增加" disabled>+</button></div></div>
+  </section>
+
+  <section class="card card-pad stack">
+    <h3 style="font-size:16px">交易方式</h3>
+    <div class="radio-group" data-single>
+      <button class="radio-card mode-card"><span class="t"><i data-icon="pin"></i>面交</span><span class="d">卖家确认后约时间地点，当面验货付款。平台不经手资金。</span></button>
+      <button class="radio-card mode-card active"><span class="t"><i data-icon="shield"></i>担保交易</span><span class="d">现在付款到平台，确认收货后才打款给卖家，有问题可申请退款。</span></button>
+    </div>
+    <div class="field"><label for="c-note">给卖家留言</label><input id="c-note" class="input" placeholder="例如：明天下午 3 点后有空（选填）"></div>
+    <div class="alert alert-info"><i data-icon="clock"></i><span>下单后请在 <b>15 分钟</b>内完成支付，超时订单自动取消。</span></div>
+  </section>
+
+  <section class="card card-pad total between">
+    <div>合计 <span class="price" style="font-size:26px"><small>¥</small>2650.00</span></div>
+    <a class="btn btn-buy btn-lg" href="order.html">提交订单并支付</a>
+  </section>
+  <p class="subtle" style="text-align:center">支付使用支付宝沙箱环境，仅用于演示</p>
+</div></main>
+<script src="assets/app.js"></script>
+</body>
+</html>

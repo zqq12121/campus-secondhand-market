@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>订单与纠纷 · 管理后台</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+  .party { padding: 16px; border-radius: 12px; background: #F8FAFC; display: flex; flex-direction: column; gap: 8px; }
+  .evid { display: flex; gap: 8px; }
+  .evid span { width: 72px; height: 72px; border-radius: 10px; display: grid; place-items: center; }
+  .chat-log { max-height: 220px; overflow-y: auto; font-size: 13px; display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 12px; border: 1px solid var(--border); }
+</style>
+</head>
+<body data-page="disputes">
+<div class="admin">
+  <div id="admin-side"></div>
+  <div class="admin-main">
+    <header class="admin-top"><h1 style="font-size:18px">订单与纠纷</h1><div class="row"><span class="avatar avatar-sm">管</span><span class="hide-sm">admin</span></div></header>
+    <main class="admin-content">
+      <section class="card" data-tabs>
+        <div class="tabs" style="padding:0 16px"><button class="tab active" data-tab="d">待裁决纠纷<span class="count">3</span></button><button class="tab" data-tab="o">订单查询</button></div>
+
+        <div class="tab-panel active" data-panel="d">
+          <div class="table-wrap"><table class="table">
+            <thead><tr><th>订单号</th><th>商品</th><th>买家 / 卖家</th><th>金额</th><th>退款原因</th><th>申请介入</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td class="num">CT202611150088</td><td>AirPods Pro 2</td><td>许同学 / 阿杰</td><td class="price">¥860</td><td>商品有质量问题</td><td class="subtle">11-18 22:10</td><td><button class="btn btn-primary btn-sm" data-open="judge-modal">裁决</button></td></tr>
+              <tr><td class="num">CT202611120041</td><td>机械键盘 青轴</td><td>周同学 / 键盘侠</td><td class="price">¥150</td><td>与描述不符</td><td class="subtle">11-17 13:45</td><td><button class="btn btn-primary btn-sm" data-open="judge-modal">裁决</button></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="tab-panel" data-panel="o">
+          <div class="toolbar">
+            <input class="input" placeholder="订单号 / 买家 / 卖家" aria-label="搜索订单号、买家或卖家">
+            <select class="select" aria-label="按订单状态筛选"><option>全部状态</option><option>待卖家确认</option><option>待面交</option><option>待支付</option><option>待交货</option><option>待收货</option><option>售后中</option><option>已完成</option><option>已取消</option><option>已退款</option></select>
+            <select class="select" aria-label="按交易方式筛选"><option>全部方式</option><option>面交</option><option>担保</option></select>
+            <input class="input" type="date" aria-label="开始日期"><button class="btn btn-primary btn-sm">查询</button>
+          </div>
+          <div class="table-wrap"><table class="table">
+            <thead><tr><th>订单号</th><th>商品</th><th>方式</th><th>金额</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td class="num">CT202611180107</td><td>iPad Air 5 64G</td><td>担保</td><td class="price">¥2650</td><td><span class="tag tag-blue">待收货</span></td><td class="subtle">11-18 20:31</td><td><button class="btn btn-outline btn-sm" data-toast="原型：查看订单详情与状态日志">详情</button></td></tr>
+              <tr><td class="num">CT202611160033</td><td>高等数学 第七版</td><td>面交</td><td class="price">¥25</td><td><span class="tag tag-yellow">待面交</span></td><td class="subtle">11-16 09:12</td><td><button class="btn btn-outline btn-sm" data-toast="原型：查看订单详情与状态日志">详情</button></td></tr>
+            </tbody>
+          </table></div>
+          <p class="subtle" style="padding:0 24px 16px">后台不能直接修改订单状态，只能通过纠纷裁决处理。</p>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div class="modal-mask" id="judge-modal" role="dialog" aria-modal="true" aria-labelledby="jd-title"><div class="modal" style="max-width:720px">
+  <div class="modal-head"><h3 id="jd-title">纠纷裁决 · CT202611150088</h3><button class="icon-btn" data-close aria-label="关闭"><i data-icon="x"></i></button></div>
+  <div class="modal-body">
+    <div class="list-item" style="padding:0;border:0"><span class="thumb tint-4"><i data-icon="headphones"></i></span><div style="flex:1">AirPods Pro 2 · 担保交易<div class="subtle">付款 11-15 · 交货 11-16 · 申请退款 11-17 · 卖家拒绝 11-18</div></div><span class="price">¥860</span></div>
+    <div class="grid-2" style="gap:12px">
+      <div class="party"><b>买家 · 许同学</b><p class="muted" style="font-size:14px">左耳没有声音，充电盒指示灯不亮。</p><div class="evid"><span class="tint-2"><i data-icon="image"></i></span><span class="tint-2"><i data-icon="image"></i></span></div></div>
+      <div class="party"><b>卖家 · 阿杰</b><p class="muted" style="font-size:14px">交货时当面测试过两只都正常，可能是买家摔了。</p><div class="evid"><span class="tint-1"><i data-icon="image"></i></span></div></div>
+    </div>
+    <div class="field"><label>聊天记录</label>
+      <div class="chat-log"><span><b>许同学</b> 11-16 18:02：耳机拿到了，谢谢</span><span><b>许同学</b> 11-17 09:30：左耳没声音了，是不是之前就坏了？</span><span><b>阿杰</b> 11-17 10:12：昨天当面试过是好的</span></div></div>
+    <div class="field"><label>裁决结果<span class="req">*</span></label><div class="radio-group" data-single><button class="radio-card active">全额退款给买家</button><button class="radio-card">放款给卖家</button></div></div>
+    <div class="field"><label for="jd-r">裁决理由<span class="req">*</span></label><textarea id="jd-r" class="textarea" style="min-height:80px" placeholder="将通知双方，败诉方扣 5 信用分"></textarea></div>
+  </div>
+  <div class="modal-foot"><button class="btn btn-outline" data-close>取消</button><button class="btn btn-primary" data-close data-toast="已裁决，原路退款处理中">提交裁决</button></div>
+</div></div>
+<script src="../assets/app.js"></script>
+</body>
+</html>
