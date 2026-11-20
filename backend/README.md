@@ -18,7 +18,9 @@ Spring Boot 3.5 + MyBatis-Plus + Spring Security（JWT）+ MySQL 8 + Redis + Rab
 | 通知（含 WebSocket 实时推送） | 11 | V1.1 完成 |
 | 后台：登录、商品审核与管理、用户管理、操作日志 | 13.1 / 13.3–13.5 | 已完成 |
 | 后台：订单查询、纠纷裁决 | 13.6–13.7 | V1.1 完成 |
-| 求购、举报、数据看板、分类/内容/系统管理 | 6、12、13.2、13.8–13.11 | V1.2 |
+| 求购广场（含到期自动过期）、用户举报 | 6、12 | V1.2 完成 |
+| 后台：举报处理（成立时下架/关帖/扣分/封禁，同对象待处理举报一并处理） | 13.8 | V1.2 完成 |
+| 数据看板、分类/内容/系统管理、操作日志查询 | 13.2、13.9–13.11 | V1.2 |
 
 ## 本地运行
 
@@ -80,7 +82,7 @@ com.campustrade
 ├── security      JWT 签发/解析、HTTP 过滤器、STOMP 鉴权、token 失效（Redis）
 ├── infra         限流、邮件、敏感词 DFA、本地文件存储、在线状态、实时推送、mq（延时队列）
 ├── entity/mapper 与 sql/schema.sql 一一对应
-└── module        按业务分包：auth、user、common、goods、chat、order、pay、aftersale、review、notification、admin
+└── module        按业务分包：auth、user、common、goods、want、chat、order、pay、aftersale、review、report、notification、admin
 ```
 
 ## 实现要点

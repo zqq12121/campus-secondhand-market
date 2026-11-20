@@ -15,6 +15,14 @@ public final class Consts {
                 SOLD = 5, OFF_SHELF = 6, FORCED_OFF = 7;
     }
 
+    public static final class WantStatus {
+        public static final int ACTIVE = 0, SOLVED = 1, EXPIRED = 2, CLOSED_BY_ADMIN = 3;
+    }
+
+    public static final class ReportTarget {
+        public static final int GOODS = 1, USER = 2, WANT = 3;
+    }
+
     public static final class TradeMode {
         public static final int FACE = 1, GUARANTEE = 2, BOTH = 3;
     }

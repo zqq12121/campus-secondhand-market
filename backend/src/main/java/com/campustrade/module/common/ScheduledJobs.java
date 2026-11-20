@@ -22,6 +22,7 @@ import com.campustrade.module.aftersale.AfterSaleService;
 import com.campustrade.module.order.TimeoutService;
 import com.campustrade.module.order.OrderStateMachine;
 import com.campustrade.module.review.ReviewService;
+import com.campustrade.module.want.WantService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -31,7 +32,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 定时任务：超时订单 / 售后的兜底扫描（主路径为 RabbitMQ 延时队列）、退款重试、默认好评、商品过期、处罚到期。
+ * 定时任务：超时订单 / 售后的兜底扫描（主路径为 RabbitMQ 延时队列）、退款重试、默认好评、商品过期、求购过期、处罚到期。
  * 每批最多处理 200 条，单条失败不影响其他。
  */
 @Slf4j
@@ -49,6 +50,7 @@ public class ScheduledJobs {
     private final AfterSaleMapper afterSaleMapper;
     private final ReviewService reviewService;
     private final NotificationService notificationService;
+    private final WantService wantService;
     private final AppProperties props;
 
     /** 兜底扫描：延时消息丢失或 MQ 不可用时，由这里补处理超时订单与售后 */
@@ -131,6 +133,12 @@ public class ScheduledJobs {
                         RefType.GOODS, g.getId());
             }
         }
+    }
+
+    /** 求购帖到期：进行中 → 已过期 */
+    @Scheduled(cron = "0 5 * * * *")
+    public void expireWants() {
+        run("求购帖过期", () -> wantService.expire(null));
     }
 
     /** 禁言 / 封禁到期自动恢复 */
