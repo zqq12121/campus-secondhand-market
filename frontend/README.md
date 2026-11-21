@@ -10,7 +10,7 @@ Vue 3 + TypeScript + Vite + Element Plus + Pinia。按 `docs/接口文档.md` �
 ```bash
 npm install
 npm run dev        # Mock 模式，不需要后端，http://localhost:5180
-npm run dev:real   # 把 /api、/ws 代理到 .env.real 里的 VITE_API_TARGET
+npm run dev:real   # 把 /api、/ws 代理到 .env.real 里的 VITE_API_TARGET；/api/v1/ai 代理到 VITE_AI_TARGET（默认 http://localhost:8090）
 npm run build      # 类型检查 + 生产构建
 ```
 

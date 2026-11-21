@@ -1,0 +1,93 @@
+# 校园二手助手 ai-service
+
+Python 3.11 + FastAPI + LangGraph + DeepSeek。独立部署，Java 后端无需改动。需求见「校园二手助手 Agent 需求文档」。
+
+当前进度：**M1**，即图骨架、商品混合检索 RAG、短期记忆和 SSE 接口。
+
+## 结构
+
+```
+app/
+├── main.py            # FastAPI：POST /api/v1/ai/chat（SSE）、GET /api/v1/ai/health
+├── config.py          # 全部配置走环境变量（见仓库根目录 .env.example）
+├── java_client.py     # 带用户 token 调 Java /api/v1
+├── ratelimit.py       # 按用户每分钟 / 每天次数
+├── rag/
+│   ├── embedder.py    # 本地 bge-small-zh
+│   └── goods_index.py # MySQL 增量同步 → Redis 向量索引；向量 + 关键词 RRF 混合检索
+└── graph/
+    ├── context.py     # 请求上下文（token 包在对象里，避免写进 checkpoint）
+    ├── tools.py       # search_goods / get_goods_detail
+    └── builder.py     # START → prepare（历史摘要）→ agent ⇄ tools → END
+```
+
+## 本地运行
+
+前置条件：`docker compose up -d` 已启动 MySQL / Redis，Java 后端运行在 8080。
+
+1. 在仓库根目录 `.env` 中填写 `DEEPSEEK_API_KEY` 等配置，参考 `.env.example` 的「校园二手助手」段。
+2. 创建 MySQL 只读账号。只授予同步需要的 3 张表，密码与 `.env` 中的 `AI_MYSQL_PASSWORD` 一致：
+
+   ```bash
+   docker exec -it campus-trade-mysql mysql -uroot -p
+   ```
+
+   ```sql
+   CREATE USER 'ai_ro'@'%' IDENTIFIED BY '<AI_MYSQL_PASSWORD>';
+   GRANT SELECT ON campus_trade.goods TO 'ai_ro'@'%';
+   GRANT SELECT ON campus_trade.category TO 'ai_ro'@'%';
+   GRANT SELECT ON campus_trade.campus TO 'ai_ro'@'%';
+   ```
+
+3. 启动服务（首次启动会下载 embedding 模型，约 100 MB）：
+
+   ```bash
+   cd ai-service
+   uv sync
+   uv run uvicorn app.main:app --port 8090 --reload
+   ```
+
+4. 前端执行 `npm run dev:real`，`/api/v1/ai` 会被代理到 8090。
+
+## 演示数据
+
+`sql/demo_goods.sql` 包含 3 个演示卖家和 40 件商品，覆盖 2 个校区和全部二级分类；其中 1 件已售出、1 件已下架，用于检验过滤。脚本可重复执行，只会删除并重建 id 在 90001–90999 范围内的商品。
+
+```bash
+docker exec -i campus-trade-mysql sh -c 'mysql --default-character-set=utf8mb4 -uroot -p"$MYSQL_ROOT_PASSWORD" campus_trade' < sql/demo_goods.sql
+```
+
+封面图地址为 `/uploads/demo/goods-<id>.svg`，图片文件不随仓库提交。演示卖家不能登录，体验时请自己注册账号。
+
+## 接口
+
+`POST /api/v1/ai/chat`，请求头 `Authorization: Bearer <用户 token>`。
+
+```json
+{ "conversationId": "可选，续聊时传上次 done 事件返回的值", "message": "东区 100 以内的显示器" }
+```
+
+返回 `text/event-stream`：
+
+| event | data |
+| --- | --- |
+| `token` | 回复文本片段 |
+| `tool` | `{name, status: start \| end}` |
+| `goods` | 核实过、可购买的商品卡片数组 |
+| `done` | `{conversationId, usage}` |
+| `error` | `{code, message}` |
+
+未登录或 token 失效返回 401，超限返回 429，格式与 Java 统一响应一致。
+
+## 测试
+
+```bash
+uv run pytest
+```
+
+测试用脚本化的假模型和假 Java，不调用 DeepSeek，不依赖外部服务。
+
+## 注意
+
+- 商品索引每 `GOODS_SYNC_INTERVAL_SECONDS` 秒按 `goods.updated_at` 增量同步。更换 embedding 模型后，需要先删除 Redis 里的 `ai_goods` 索引和 `ai:goods_index:watermark`，再重启服务。
+- `search_goods` 会同时调用 Java `/goods?keyword=`，这些查询会计入热搜词。
