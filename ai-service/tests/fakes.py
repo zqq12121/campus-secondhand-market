@@ -24,6 +24,9 @@ class ScriptedModel(BaseChatModel):
     script: list[Any]
     seen: list[list[BaseMessage]] = []
     bound_tools: bool = False
+    # 偏好抽取调用（save_memory）单独应答，不占用 script
+    memory_replies: list[str] = []
+    memory_prompts: list[str] = []
 
     @property
     def _llm_type(self) -> str:
@@ -33,6 +36,10 @@ class ScriptedModel(BaseChatModel):
         return self.model_copy(update={"bound_tools": True})
 
     def _next(self, messages: list[BaseMessage]) -> AIMessage:
+        if "长期偏好。根据本轮对话" in messages[-1].text:
+            self.memory_prompts.append(messages[-1].text)
+            reply = self.memory_replies.pop(0) if self.memory_replies else '{"set": {}, "delete": []}'
+            return AIMessage(reply)
         self.seen.append(messages)
         item = self.script.pop(0)
         return item(messages) if isinstance(item, Callable) else item
@@ -93,6 +100,22 @@ class FakeJava:
         if goods_id not in self.goods:
             raise JavaApiError(2001, "商品不存在")
         return self.goods[goods_id]
+
+    async def list_orders(self, token: str, role: str, status: list[int] | None = None,
+                          size: int = 10) -> list[dict[str, Any]]:
+        self.calls.append(("orders", {"role": role, "status": status}))
+        return [{"id": "6001", "goodsTitle": "台灯", "totalAmount": "15.00", "tradeMode": 2, "status": 50,
+                 "counterpart": {"nickname": "卖家"}, "createdAt": "2026-11-20 10:00:00"}]
+
+    async def get_order(self, token: str, order_id: str) -> dict[str, Any]:
+        from app.java_client import JavaApiError
+
+        if order_id != "6001":
+            raise JavaApiError(403, "无权限")
+        return {"id": "6001", "orderNo": "N1", "myRole": "BUYER", "goods": {"title": "台灯", "location": "南区"},
+                "totalAmount": "15.00", "tradeMode": 2, "status": 50,
+                "deadline": {"action": "AUTO_CONFIRM", "at": "2026-11-27 12:00:00"},
+                "actions": ["CONFIRM_RECEIPT", "APPLY_REFUND"]}
 
     async def categories(self) -> list[dict[str, Any]]:
         return [{"id": "1", "name": "数码", "children": [{"id": "101", "name": "显示器"}]}]

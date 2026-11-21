@@ -2,6 +2,7 @@ import json
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.store.memory import InMemoryStore
 
 from app.graph.builder import build_graph
 from tests.fakes import FakeIndex, FakeJava, ScriptedModel, call, goods, make_ctx, settings
@@ -23,7 +24,7 @@ async def test_search_then_verify_then_answer_and_follow_up_keeps_context() -> N
         call("get_goods_detail", goods_id="g2"),
         AIMessage("更便宜的有 g2，60 元。"),
     ])
-    graph = build_graph(model, settings(), InMemorySaver())
+    graph = build_graph(model, settings(), InMemorySaver(), InMemoryStore())
     ctx = make_ctx(java, index)
 
     out = await graph.ainvoke({"messages": [HumanMessage("东区 100 以内的显示器")]}, config(ctx))
@@ -45,7 +46,7 @@ async def test_unavailable_goods_are_marked() -> None:
     java = FakeJava({"g1": goods("g1", "台灯", "10.00", status=5)})
     model = ScriptedModel(script=[call("get_goods_detail", goods_id="g1"),
                                   call("get_goods_detail", goods_id="nope"), AIMessage("都卖掉了")])
-    graph = build_graph(model, settings(), InMemorySaver())
+    graph = build_graph(model, settings(), InMemorySaver(), InMemoryStore())
     out = await graph.ainvoke({"messages": [HumanMessage("台灯")]}, config(make_ctx(java, FakeIndex())))
     results = [json.loads(m.content) for m in out["messages"] if isinstance(m, ToolMessage)]
     assert results[0]["available"] is False
@@ -56,7 +57,7 @@ async def test_tool_call_limit_forces_answer() -> None:
     java = FakeJava({"g1": goods("g1", "台灯", "10.00")})
     model = ScriptedModel(script=[call("get_goods_detail", goods_id="g1"), call("get_goods_detail", goods_id="g1"),
                                   AIMessage("就这些")])
-    graph = build_graph(model, settings(ai_max_tool_calls=2), InMemorySaver())
+    graph = build_graph(model, settings(ai_max_tool_calls=2), InMemorySaver(), InMemoryStore())
     out = await graph.ainvoke({"messages": [HumanMessage("台灯")]}, config(make_ctx(java, FakeIndex())))
     assert out["messages"][-1].content == "就这些"
     assert "上限" in model.seen[-1][-1].content
@@ -70,7 +71,7 @@ async def test_long_history_is_summarized() -> None:
     # 第 5 轮（q4）开始时历史 9 条 > 8，先调一次模型生成摘要
     script.insert(4, AIMessage("用户想要显示器"))
     model = ScriptedModel(script=script)
-    graph = build_graph(model, settings(ai_history_max_messages=8, ai_history_keep_messages=4), InMemorySaver())
+    graph = build_graph(model, settings(ai_history_max_messages=8, ai_history_keep_messages=4), InMemorySaver(), InMemoryStore())
     ctx = make_ctx(java, FakeIndex())
     for i in range(5):
         await graph.ainvoke({"messages": [HumanMessage(f"q{i}")]}, config(ctx))

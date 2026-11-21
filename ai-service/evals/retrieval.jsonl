@@ -1,0 +1,35 @@
+{"query": "高数课本", "relevant": ["90001"]}
+{"query": "大学物理教材", "relevant": ["90002"]}
+{"query": "数据结构", "relevant": ["90003"]}
+{"query": "考研英语资料", "relevant": ["90005"]}
+{"query": "计算机二级", "relevant": ["90006"]}
+{"query": "科幻小说", "relevant": ["90007"]}
+{"query": "余华的书", "relevant": ["90008"]}
+{"query": "平板电脑", "relevant": ["90009"]}
+{"query": "便宜的备用手机", "relevant": ["90010"]}
+{"query": "电子书阅读器", "relevant": ["90011"]}
+{"query": "显示器", "relevant": ["90012", "90013", "90014", "90015"]}
+{"query": "打游戏的高刷屏", "relevant": ["90014"]}
+{"query": "无线键盘", "relevant": ["90016"]}
+{"query": "鼠标", "relevant": ["90017"]}
+{"query": "笔记本电脑支架", "relevant": ["90018"]}
+{"query": "苹果无线耳机", "relevant": ["90019"]}
+{"query": "降噪耳机", "relevant": ["90020", "90019"]}
+{"query": "蓝牙音箱", "relevant": ["90021"]}
+{"query": "宿舍煮面的锅", "relevant": ["90022"]}
+{"query": "看书用的台灯", "relevant": ["90023"]}
+{"query": "夏天宿舍吹风", "relevant": ["90024"]}
+{"query": "烧开水", "relevant": ["90025"]}
+{"query": "插线板", "relevant": ["90026"]}
+{"query": "床帘", "relevant": ["90028"]}
+{"query": "收纳整理", "relevant": ["90029"]}
+{"query": "免费送的东西", "max_price": 0, "relevant": ["90030"]}
+{"query": "冬天的外套", "relevant": ["90031"]}
+{"query": "毕业照穿的衣服", "relevant": ["90032"]}
+{"query": "运动鞋", "relevant": ["90033"]}
+{"query": "装电脑的书包", "relevant": ["90034"]}
+{"query": "代步工具", "relevant": ["90035", "90036"]}
+{"query": "羽毛球", "relevant": ["90037"]}
+{"query": "健身器材", "relevant": ["90039", "90038"]}
+{"query": "乐器", "relevant": ["90040"]}
+{"query": "显示器", "campus_id": "1", "max_price": 100, "relevant": ["90013"]}

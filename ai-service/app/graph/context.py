@@ -10,6 +10,7 @@ from langchain_core.runnables import RunnableConfig
 
 from app.java_client import JavaClient
 from app.rag.goods_index import GoodsIndex
+from app.rag.rules_index import RulesIndex
 
 
 @dataclass(frozen=True)
@@ -20,6 +21,7 @@ class RequestContext:
     goods_index: GoodsIndex
     categories: list[dict[str, Any]]
     campuses: list[dict[str, Any]]
+    rules_index: RulesIndex | None = None
 
 
 def get_ctx(config: RunnableConfig) -> RequestContext:

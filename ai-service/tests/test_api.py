@@ -3,6 +3,7 @@ import json
 import httpx
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.store.memory import InMemoryStore
 
 from app.graph.builder import build_graph
 from app.main import AppState, app
@@ -12,8 +13,9 @@ from tests.fakes import FakeIndex, FakeJava, FakeRedis, ScriptedModel, call, goo
 def setup_app(script: list, **overrides: object) -> FakeJava:
     s = settings(**overrides)
     java = FakeJava({"g1": goods("g1", "台灯", "15.00"), "g2": goods("g2", "旧台灯", "5.00", reason="BLOCKED")})
-    graph = build_graph(ScriptedModel(script=script), s, InMemorySaver())
-    app.state.ai = AppState(s, FakeRedis(), java, FakeIndex(), graph)
+    store = InMemoryStore()
+    graph = build_graph(ScriptedModel(script=script), s, InMemorySaver(), store)
+    app.state.ai = AppState(s, FakeRedis(), java, FakeIndex(), graph, store)
     return java
 
 
@@ -81,3 +83,23 @@ async def test_model_failure_becomes_error_event() -> None:
     async with client() as c:
         r = await c.post("/api/v1/ai/chat", json={"message": "x"}, headers={"Authorization": "Bearer good"})
     assert parse_sse(r.text)[-1][0] == "error"
+
+
+async def test_memory_endpoints_list_and_delete() -> None:
+    setup_app([])
+    store = app.state.ai.store
+    await store.aput(("user", "7"), "campus", {"value": "贝克兰德"})
+    await store.aput(("user", "7"), "budget", {"value": "300 以内"})
+    await store.aput(("user", "8"), "campus", {"value": "廷根"})  # 别人的偏好不可见
+    h = {"Authorization": "Bearer good"}
+    async with client() as c:
+        listed = (await c.get("/api/v1/ai/memory", headers=h)).json()["data"]
+        assert {(m["key"], m["label"], m["value"]) for m in listed} == {("campus", "常用校区", "贝克兰德"),
+                                                                        ("budget", "预算习惯", "300 以内")}
+        assert (await c.delete("/api/v1/ai/memory/campus", headers=h)).status_code == 200
+        assert (await c.delete("/api/v1/ai/memory/unknown", headers=h)).status_code == 404
+        assert [m["key"] for m in (await c.get("/api/v1/ai/memory", headers=h)).json()["data"]] == ["budget"]
+        await c.delete("/api/v1/ai/memory", headers=h)
+        assert (await c.get("/api/v1/ai/memory", headers=h)).json()["data"] == []
+        assert (await c.get("/api/v1/ai/memory")).status_code == 401
+    assert (await store.aget(("user", "8"), "campus")) is not None

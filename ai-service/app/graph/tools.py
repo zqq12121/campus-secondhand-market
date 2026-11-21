@@ -63,4 +63,67 @@ async def get_goods_detail(goods_id: str, config: RunnableConfig) -> str:
     })
 
 
-TOOLS = [search_goods, get_goods_detail]
+@tool(parse_docstring=True)
+async def search_rules(question: str, config: RunnableConfig) -> str:
+    """检索平台规则、FAQ 和公告（交易流程、售后、信用分、发布与求购、账号与评价等）。回答规则问题前必须调用。
+
+    Args:
+        question: 用户的规则问题，如「确认收货后还能退款吗」。
+    """
+    ctx = get_ctx(config)
+    if ctx.rules_index is None:
+        return _dump({"results": [], "note": "规则库暂不可用"})
+    return _dump({"results": await ctx.rules_index.search(question)})
+
+
+ORDER_STATUS = {10: "待卖家确认", 20: "待面交", 30: "待支付", 40: "待交货", 50: "待收货", 60: "售后中",
+                70: "已完成", 80: "已取消", 90: "已退款"}
+TRADE_MODE = {1: "面交", 2: "担保"}
+
+
+@tool(parse_docstring=True)
+async def list_my_orders(config: RunnableConfig, role: str = "BUYER", status: list[int] | None = None) -> str:
+    """查询当前用户的订单列表（最近 10 条）。只能查询，不能操作订单。
+
+    Args:
+        role: BUYER 我买到的，SELLER 我卖出的。
+        status: 按状态码筛选，可多选：10 待卖家确认 / 20 待面交 / 30 待支付 / 40 待交货 / 50 待收货 / 60 售后中 / 70 已完成 / 80 已取消 / 90 已退款。
+    """
+    ctx = get_ctx(config)
+    role = "SELLER" if role.upper() == "SELLER" else "BUYER"
+    try:
+        orders = await ctx.java.list_orders(ctx.token, role, status)
+    except JavaApiError as e:
+        return _dump({"error": e.message})
+    return _dump({"role": role, "orders": [
+        {"id": o["id"], "goodsTitle": o["goodsTitle"], "totalAmount": o["totalAmount"],
+         "tradeMode": TRADE_MODE.get(o["tradeMode"]), "status": ORDER_STATUS.get(o["status"], o["status"]),
+         "counterpart": (o.get("counterpart") or {}).get("nickname"), "createdAt": o.get("createdAt")}
+        for o in orders
+    ]})
+
+
+@tool(parse_docstring=True)
+async def get_order(order_id: str, config: RunnableConfig) -> str:
+    """查询一个订单的详情：当前状态、时间线、下一个超时节点、售后情况和用户此刻可做的操作。
+
+    Args:
+        order_id: 订单 id（来自 list_my_orders）。
+    """
+    ctx = get_ctx(config)
+    try:
+        o = await ctx.java.get_order(ctx.token, order_id)
+    except JavaApiError as e:
+        return _dump({"id": order_id, "error": e.message})
+    goods_info = o.get("goods") or {}
+    return _dump({
+        "id": o["id"], "orderNo": o.get("orderNo"), "myRole": o.get("myRole"),
+        "goods": {k: goods_info.get(k) for k in ("title", "location", "campusName")},
+        "totalAmount": o.get("totalAmount"), "tradeMode": TRADE_MODE.get(o.get("tradeMode")),
+        "status": ORDER_STATUS.get(o.get("status"), o.get("status")), "timeline": o.get("timeline"),
+        "deadline": o.get("deadline"), "cancelReason": o.get("cancelReason"),
+        "afterSale": o.get("afterSale"), "actions": o.get("actions"),
+    })
+
+
+TOOLS = [search_goods, get_goods_detail, search_rules, list_my_orders, get_order]

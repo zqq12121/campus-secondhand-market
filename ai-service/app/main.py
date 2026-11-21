@@ -14,15 +14,19 @@ from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, Too
 from langchain_deepseek import ChatDeepSeek
 from langgraph.checkpoint.redis.aio import AsyncRedisSaver
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.store.base import BaseStore
+from langgraph.store.redis.aio import AsyncRedisStore
 from pydantic import BaseModel, Field
 from redis.asyncio import Redis
 
 from app.config import Settings, get_settings
 from app.graph.builder import build_graph
 from app.graph.context import RequestContext
-from app.java_client import JavaAuthError, JavaClient
+from app.graph.memory import SLOTS, namespace
+from app.java_client import JavaApiError, JavaAuthError, JavaClient
 from app.rag.embedder import SentenceTransformerEmbedder
 from app.rag.goods_index import GoodsIndex
+from app.rag.rules_index import RulesIndex
 from app.ratelimit import check_rate
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -40,12 +44,14 @@ class AppState:
     """进程级依赖，lifespan 中创建。分类 / 校区列表缓存 10 分钟。"""
 
     def __init__(self, settings: Settings, redis: Redis, java: JavaClient, goods_index: GoodsIndex,
-                 graph: CompiledStateGraph) -> None:
+                 graph: CompiledStateGraph, store: BaseStore, rules_index: RulesIndex | None = None) -> None:
         self.settings = settings
         self.redis = redis
         self.java = java
         self.goods_index = goods_index
         self.graph = graph
+        self.store = store
+        self.rules_index = rules_index
         self._meta: tuple[float, list[dict[str, Any]], list[dict[str, Any]]] | None = None
 
     async def meta(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -68,20 +74,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     java = JavaClient(s.backend_base_url)
     embedder = await asyncio.to_thread(SentenceTransformerEmbedder, s.embedding_model, s.embedding_query_instruction)
     goods_index = GoodsIndex(s, redis, embedder)
-    sync_task = None
+    rules_index = RulesIndex(redis, embedder, java)
+    tasks = [asyncio.create_task(rules_index.run_forever())]
     if s.ai_mysql_user:
-        sync_task = asyncio.create_task(goods_index.run_forever())
+        tasks.append(asyncio.create_task(goods_index.run_forever()))
     else:
         log.warning("未配置 AI_MYSQL_USER，商品向量索引不会同步，检索只用关键词")
-    async with AsyncRedisSaver.from_conn_string(
-        s.redis_url, ttl={"default_ttl": s.ai_session_ttl_days * 24 * 60, "refresh_on_read": True}
-    ) as checkpointer:
+    async with (
+        AsyncRedisSaver.from_conn_string(
+            s.redis_url, ttl={"default_ttl": s.ai_session_ttl_days * 24 * 60, "refresh_on_read": True}
+        ) as checkpointer,
+        AsyncRedisStore.from_conn_string(s.redis_url, store_prefix="ai:memory") as store,
+    ):
         await checkpointer.asetup()
-        graph = build_graph(build_llm(s), s, checkpointer)
-        app.state.ai = AppState(s, redis, java, goods_index, graph)
+        await store.setup()
+        graph = build_graph(build_llm(s), s, checkpointer, store)
+        app.state.ai = AppState(s, redis, java, goods_index, graph, store, rules_index)
         yield
-    if sync_task:
-        sync_task.cancel()
+    for t in tasks:
+        t.cancel()
     await java.aclose()
     await redis.aclose()
 
@@ -103,6 +114,10 @@ async def current_user(authorization: str | None = Header(default=None),
         return token, await st.java.get_me(token)
     except JavaAuthError:
         raise HTTPException(401, "登录已失效")
+    except JavaApiError as e:
+        if e.code == 403:
+            raise HTTPException(403, "账号已被限制")
+        raise
 
 
 @app.exception_handler(HTTPException)
@@ -179,10 +194,38 @@ async def chat(body: ChatRequest, user: tuple[str, dict[str, Any]] = Depends(cur
         raise HTTPException(429, "提问太频繁，请稍后再试", headers={"Retry-After": str(retry_after)})
     categories, campuses = await st.meta()
     ctx = RequestContext(token=token, user=me, java=st.java, goods_index=st.goods_index,
-                         categories=categories, campuses=campuses)
+                         categories=categories, campuses=campuses, rules_index=st.rules_index)
     conv_id = body.conversationId or str(uuid.uuid4())
     return StreamingResponse(stream_chat(st, ctx, conv_id, body.message), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.get("/api/v1/ai/memory")
+async def list_memory(user: tuple[str, dict[str, Any]] = Depends(current_user),
+                      st: AppState = Depends(get_app_state)) -> dict[str, Any]:
+    """「我的偏好」：查看长期记忆。"""
+    items = await st.store.asearch(namespace(user[1]["id"]), limit=len(SLOTS))
+    data = [{"key": i.key, "label": SLOTS[i.key], "value": i.value["value"],
+             "updatedAt": i.updated_at.astimezone().strftime("%Y-%m-%d %H:%M:%S")}
+            for i in items if i.key in SLOTS]
+    return {"code": 0, "message": "ok", "data": data}
+
+
+@app.delete("/api/v1/ai/memory/{key}")
+async def delete_memory(key: str, user: tuple[str, dict[str, Any]] = Depends(current_user),
+                        st: AppState = Depends(get_app_state)) -> dict[str, Any]:
+    if key not in SLOTS:
+        raise HTTPException(404, "偏好不存在")
+    await st.store.adelete(namespace(user[1]["id"]), key)
+    return {"code": 0, "message": "ok", "data": None}
+
+
+@app.delete("/api/v1/ai/memory")
+async def clear_memory(user: tuple[str, dict[str, Any]] = Depends(current_user),
+                       st: AppState = Depends(get_app_state)) -> dict[str, Any]:
+    for key in SLOTS:
+        await st.store.adelete(namespace(user[1]["id"]), key)
+    return {"code": 0, "message": "ok", "data": None}
 
 
 @app.get("/api/v1/ai/health")
