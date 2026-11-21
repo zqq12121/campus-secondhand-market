@@ -117,6 +117,14 @@ class FakeJava:
                 "deadline": {"action": "AUTO_CONFIRM", "at": "2026-11-27 12:00:00"},
                 "actions": ["CONFIRM_RECEIPT", "APPLY_REFUND"]}
 
+    async def create_want(self, token: str, body: dict[str, Any]) -> dict[str, Any]:
+        self.calls.append(("create_want", body))
+        return {"id": "701"}
+
+    async def fetch_upload(self, relative_path: str) -> tuple[bytes, str]:
+        self.calls.append(("fetch_upload", {"path": relative_path}))
+        return b"\x89PNG-fake", "image/png"
+
     async def categories(self) -> list[dict[str, Any]]:
         return [{"id": "1", "name": "数码", "children": [{"id": "101", "name": "显示器"}]}]
 

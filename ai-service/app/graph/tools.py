@@ -1,4 +1,4 @@
-"""M1 工具：商品混合检索 + 商品实时详情。工具结果一律是 JSON 字符串。"""
+"""agent 的全部工具。只读工具在本文件，写工具（需用户确认）在 drafts.py。工具结果一律是 JSON 字符串。"""
 import json
 from typing import Any
 
@@ -6,6 +6,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
 from app.graph.context import get_ctx
+from app.graph.drafts import draft_want_post, suggest_listing
 from app.java_client import JavaApiError
 from app.rag.goods_index import hybrid_search
 
@@ -126,4 +127,4 @@ async def get_order(order_id: str, config: RunnableConfig) -> str:
     })
 
 
-TOOLS = [search_goods, get_goods_detail, search_rules, list_my_orders, get_order]
+TOOLS = [search_goods, get_goods_detail, search_rules, list_my_orders, get_order, draft_want_post, suggest_listing]

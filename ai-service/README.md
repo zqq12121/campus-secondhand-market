@@ -2,16 +2,18 @@
 
 Python 3.11 + FastAPI + LangGraph + DeepSeek。独立部署，Java 后端无需改动。需求见「校园二手助手 Agent 需求文档」。
 
-当前进度：**M2**。
+当前进度：**M4**（全部完成）。
 
 - M1：图骨架、商品混合检索 RAG、短期记忆、SSE 接口。
 - M2：规则问答 RAG（带出处）、长期偏好记忆、订单查询。
+- M3：写操作（发求购、生成发布草稿）+ `interrupt` 确认卡片 + `/resume`；支持上传商品图片。
+- M4：前端聊天浮窗（`frontend/src/web/assistant/`）、商品卡片、确认卡片、发布页预填、「助手偏好」页（`/me/preferences`）。
 
 ## 结构
 
 ```
 app/
-├── main.py            # FastAPI：/chat（SSE）、/memory（我的偏好）、/health
+├── main.py            # FastAPI：/chat 与 /resume（SSE）、/memory（我的偏好）、/health
 ├── config.py          # 全部配置走环境变量（见仓库根目录 .env.example）
 ├── java_client.py     # 带用户 token 调 Java /api/v1
 ├── ratelimit.py       # 按用户每分钟 / 每天次数
@@ -21,7 +23,9 @@ app/
 │   └── rules_index.py # knowledge/*.md + 上线公告 → 按二级标题切片 → Redis 向量索引
 └── graph/
     ├── context.py     # 请求上下文（token 包在对象里，避免写进 checkpoint）
-    ├── tools.py       # search_goods / get_goods_detail / search_rules / list_my_orders / get_order
+    ├── tools.py       # 只读工具：search_goods / get_goods_detail / search_rules / list_my_orders / get_order
+    ├── drafts.py      # 写工具：draft_want_post / suggest_listing，interrupt() 等用户确认
+    ├── images.py      # 本轮图片转 data URL 给模型，历史图片换占位文字
     ├── memory.py      # 长期偏好：5 个固定槽位，存 LangGraph Store（Redis）
     └── builder.py     # START → load_memory → prepare → agent ⇄ tools → save_memory → END
 knowledge/             # 平台规则知识库（交易流程、售后、信用分、发布与求购、账号与评价）
@@ -71,8 +75,10 @@ docker exec -i campus-trade-mysql sh -c 'mysql --default-character-set=utf8mb4 -
 `POST /api/v1/ai/chat`，请求头 `Authorization: Bearer <用户 token>`。
 
 ```json
-{ "conversationId": "可选，续聊时传上次 done 事件返回的值", "message": "东区 100 以内的显示器" }
+{ "conversationId": "可选，续聊时传上次 done 事件返回的值", "message": "帮我把这个卖了", "images": ["可选，最多 3 张"] }
 ```
+
+`images` 必须是先调 Java `POST /files` 上传后返回的地址（以 `UPLOAD_PUBLIC_BASE_URL` 开头），其他地址返回 400。
 
 返回 `text/event-stream`：
 
@@ -81,8 +87,20 @@ docker exec -i campus-trade-mysql sh -c 'mysql --default-character-set=utf8mb4 -
 | `token` | 回复文本片段 |
 | `tool` | `{name, status: start \| end}` |
 | `goods` | 核实过、可购买的商品卡片数组 |
-| `done` | `{conversationId, usage}` |
+| `confirm` | 写操作待确认：`{interruptId, kind: want_post \| listing, draft}`，前端渲染确认卡片 |
+| `listing` | 用户确认后的发布草稿，前端用它预填发布页 |
+| `done` | `{conversationId, usage, pending}`；`pending=true` 表示有待确认的卡片 |
 | `error` | `{code, message}` |
+
+确认卡片的回调 `POST /api/v1/ai/chat/{conversationId}/resume`，返回同样的 SSE 流：
+
+```json
+{ "interruptId": "confirm 事件里的值", "decision": "confirm | cancel", "edits": { "validDays": 15 } }
+```
+
+- `edits` 只接受白名单字段。求购：title / description / categoryId / campusId / priceMin / priceMax / validDays；发布草稿：title / description / categoryId / conditionLevel / price。修改后会重新校验。
+- 求购在确认后才调 Java `POST /wants` 发布；发布草稿只回给前端预填，始终由用户自己在发布页点发布。
+- `interruptId` 不存在或已处理返回 409。有待确认卡片时用户直接发新消息，视为取消。
 
 未登录或 token 失效返回 401，账号被封禁返回 403，超限返回 429，格式与 Java 统一响应一致。
 
@@ -129,3 +147,5 @@ AI_EVAL_TOKEN=<token> uv run python -m evals.run_rules       # 规则问答正�
 - `search_goods` 会同时调用 Java `/goods?keyword=`，这些查询会计入热搜词。
 - 规则知识库每 10 分钟检查一次 `knowledge/` 和公告，内容有变化才重建。修改规则后，记得同步更新 `knowledge/` 里的数值。
 - `save_memory` 每轮多一次模型调用，在回复流式输出完成后执行，只会推迟 `done` 事件。
+- 识图依赖 `deepseek-flash`。2026-11-21 实测 `deepseek-v4-pro` 不能识图，会胡乱描述图片，切换模型前要重新验证。
+- 参考价只取「同二级分类 + 品类词命中」的在售商品：至少 3 件时取中位数 ±20%，否则使用模型估价并注明仅供参考。

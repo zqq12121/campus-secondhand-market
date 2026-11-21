@@ -3,7 +3,7 @@
 刻意做成对象而不是字符串：LangGraph 会把 configurable 里的 str/int 值写进 checkpoint
 元数据，用户 token 放成字符串就会被持久化到 Redis。
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
@@ -22,6 +22,8 @@ class RequestContext:
     categories: list[dict[str, Any]]
     campuses: list[dict[str, Any]]
     rules_index: RulesIndex | None = None
+    # 本次请求内已转成 data URL 的图片，避免工具循环里重复读取
+    image_cache: dict[str, str] = field(default_factory=dict)
 
 
 def get_ctx(config: RunnableConfig) -> RequestContext:

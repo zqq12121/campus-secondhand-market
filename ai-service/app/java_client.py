@@ -15,19 +15,28 @@ class JavaApiError(Exception):
         self.message = message
 
 
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+
+
 class JavaClient:
     def __init__(self, base_url: str, transport: httpx.AsyncBaseTransport | None = None) -> None:
-        self._http = httpx.AsyncClient(
-            base_url=base_url.rstrip("/") + "/api/v1", timeout=10.0, transport=transport
-        )
+        self._root = base_url.rstrip("/")
+        self._http = httpx.AsyncClient(base_url=self._root + "/api/v1", timeout=10.0, transport=transport)
 
     async def aclose(self) -> None:
         await self._http.aclose()
 
     async def _get(self, path: str, token: str | None = None, params: dict[str, Any] | None = None) -> Any:
-        headers = {"Authorization": f"Bearer {token}"} if token else {}
         clean = {k: v for k, v in (params or {}).items() if v is not None}
-        resp = await self._http.get(path, headers=headers, params=clean)
+        return await self._request("GET", path, token, params=clean)
+
+    async def _post(self, path: str, token: str, body: dict[str, Any]) -> Any:
+        return await self._request("POST", path, token, json={k: v for k, v in body.items() if v is not None})
+
+    async def _request(self, method: str, path: str, token: str | None, **kwargs: Any) -> Any:
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        resp = await self._http.request(method, path, headers=headers, **kwargs)
         if resp.status_code == 401:
             raise JavaAuthError(resp.status_code)
         if resp.status_code == 403:  # 账号封禁，或访问不属于自己的资源
@@ -62,6 +71,22 @@ class JavaClient:
 
     async def announcement(self, announcement_id: str) -> dict[str, Any]:
         return await self._get(f"/announcements/{announcement_id}")
+
+    async def create_want(self, token: str, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._post("/wants", token, body)
+
+    async def fetch_upload(self, relative_path: str) -> tuple[bytes, str]:
+        """读取 Java 上传目录里的图片（走内网地址），返回 (内容, MIME)。"""
+        if ".." in relative_path or relative_path.startswith("/"):
+            raise ValueError("非法图片路径")
+        resp = await self._http.get(f"{self._root}/uploads/{relative_path}")
+        resp.raise_for_status()
+        mime = resp.headers.get("content-type", "").split(";")[0].strip()
+        if mime not in IMAGE_TYPES:
+            raise ValueError(f"不支持的图片类型：{mime}")
+        if len(resp.content) > MAX_IMAGE_BYTES:
+            raise ValueError("图片超过 5MB")
+        return resp.content, mime
 
     async def categories(self) -> list[dict[str, Any]]:
         return await self._get("/common/categories")

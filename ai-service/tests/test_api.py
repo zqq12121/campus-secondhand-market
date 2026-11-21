@@ -65,7 +65,8 @@ async def test_conversation_continues_with_same_id() -> None:
         conv = first[-1][1]["conversationId"]
         second = parse_sse((await c.post("/api/v1/ai/chat", json={"message": "again", "conversationId": conv},
                                          headers=h)).text)
-    assert second[-1] == ("done", {"conversationId": conv, "usage": {"input_tokens": 10, "output_tokens": 5}})
+    assert second[-1] == ("done", {"conversationId": conv, "usage": {"input_tokens": 10, "output_tokens": 5},
+                                       "pending": False})
     state = await app.state.ai.graph.aget_state({"configurable": {"thread_id": f"7:{conv}"}})
     assert [m.content for m in state.values["messages"]] == ["hi", "你好", "again", "还记得"]
 

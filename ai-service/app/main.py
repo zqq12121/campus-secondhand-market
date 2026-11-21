@@ -1,4 +1,4 @@
-"""ai-service 入口：POST /api/v1/ai/chat（SSE 流式）。"""
+"""ai-service 入口：/chat 与 /resume（SSE 流式）、/memory（我的偏好）。"""
 import asyncio
 import json
 import logging
@@ -6,9 +6,10 @@ import time
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Path as PathParam
 from fastapi.responses import JSONResponse, StreamingResponse
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 from langchain_deepseek import ChatDeepSeek
@@ -16,12 +17,14 @@ from langgraph.checkpoint.redis.aio import AsyncRedisSaver
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.store.base import BaseStore
 from langgraph.store.redis.aio import AsyncRedisStore
+from langgraph.types import Command
 from pydantic import BaseModel, Field
 from redis.asyncio import Redis
 
 from app.config import Settings, get_settings
 from app.graph.builder import build_graph
 from app.graph.context import RequestContext
+from app.graph.images import human_content
 from app.graph.memory import SLOTS, namespace
 from app.java_client import JavaApiError, JavaAuthError, JavaClient
 from app.rag.embedder import SentenceTransformerEmbedder
@@ -35,9 +38,21 @@ log = logging.getLogger("ai-service")
 META_TTL_SECONDS = 600
 
 
+CONV_ID_PATTERN = r"^[0-9a-f-]{36}$"
+CANCELLED_BY_NEW_MESSAGE = "用户没有确认就发送了新消息，本次操作已取消。"
+
+
 class ChatRequest(BaseModel):
-    conversationId: str | None = Field(default=None, pattern=r"^[0-9a-f-]{36}$")
+    conversationId: str | None = Field(default=None, pattern=CONV_ID_PATTERN)
     message: str = Field(min_length=1, max_length=1000)
+    # 先调 Java POST /files 上传，再把返回的地址传进来
+    images: list[str] = Field(default_factory=list, max_length=3)
+
+
+class ResumeRequest(BaseModel):
+    interruptId: str = Field(min_length=1, max_length=64)
+    decision: Literal["confirm", "cancel"]
+    edits: dict[str, Any] | None = None
 
 
 class AppState:
@@ -131,15 +146,20 @@ def sse(event: str, data: Any) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-async def stream_chat(st: AppState, ctx: RequestContext, conv_id: str, message: str) -> AsyncIterator[str]:
-    config = {"configurable": {"thread_id": f"{ctx.user['id']}:{conv_id}", "ctx": ctx}, "recursion_limit": 40}
+def thread_config(ctx: RequestContext, conv_id: str) -> dict[str, Any]:
+    # thread_id 含用户 id：别人拿到会话 id 也续不上、恢复不了
+    return {"configurable": {"thread_id": f"{ctx.user['id']}:{conv_id}", "ctx": ctx}, "recursion_limit": 40}
+
+
+async def stream_chat(st: AppState, ctx: RequestContext, conv_id: str, graph_input: Any) -> AsyncIterator[str]:
+    config = thread_config(ctx, conv_id)
     usage = {"input_tokens": 0, "output_tokens": 0}
     tool_trace: list[str] = []
     started = time.monotonic()
     last_msg_id: str | None = None
+    pending = False
     try:
-        async for mode, chunk in st.graph.astream({"messages": [HumanMessage(message)]}, config,
-                                                  stream_mode=["messages", "updates"]):
+        async for mode, chunk in st.graph.astream(graph_input, config, stream_mode=["messages", "updates"]):
             if mode == "messages":
                 msg, meta = chunk
                 if meta.get("langgraph_node") == "agent" and isinstance(msg, AIMessageChunk) and msg.text:
@@ -150,6 +170,11 @@ async def stream_chat(st: AppState, ctx: RequestContext, conv_id: str, message: 
                     yield sse("token", msg.text)
                 continue
             for node, update in chunk.items():
+                if node == "__interrupt__":  # 写工具停下等用户确认
+                    pending = True
+                    for it in update:
+                        yield sse("confirm", {"interruptId": it.id, **it.value})
+                    continue
                 for m in (update or {}).get("messages", []):
                     if isinstance(m, AIMessage):
                         for k in usage:
@@ -159,45 +184,95 @@ async def stream_chat(st: AppState, ctx: RequestContext, conv_id: str, message: 
                             yield sse("tool", {"name": tc["name"], "status": "start"})
                     elif isinstance(m, ToolMessage):
                         yield sse("tool", {"name": m.name, "status": "end"})
-                        card = goods_card(m)
-                        if card:
+                        if card := goods_card(m):
                             yield sse("goods", [card])
-        yield sse("done", {"conversationId": conv_id, "usage": usage})
+                        if draft := listing_draft(m):
+                            yield sse("listing", draft)
+        yield sse("done", {"conversationId": conv_id, "usage": usage, "pending": pending})
     except Exception:
         log.exception("对话失败 user=%s conv=%s", ctx.user["id"], conv_id)
         yield sse("error", {"code": 500, "message": "助手暂时不可用，请稍后再试"})
     finally:
         # 只记录调用序列、耗时和用量，不记录对话内容
-        log.info("chat user=%s conv=%s tools=%s ms=%d usage=%s", ctx.user["id"], conv_id, tool_trace,
-                 (time.monotonic() - started) * 1000, usage)
+        log.info("chat user=%s conv=%s tools=%s ms=%d usage=%s pending=%s", ctx.user["id"], conv_id, tool_trace,
+                 (time.monotonic() - started) * 1000, usage, pending)
+
+
+def _tool_json(m: ToolMessage, name: str) -> dict[str, Any] | None:
+    if m.name != name:
+        return None
+    try:
+        return json.loads(m.text)
+    except ValueError:
+        return None
 
 
 def goods_card(m: ToolMessage) -> dict[str, Any] | None:
     """核实过且可购买的商品推送成卡片。"""
-    if m.name != "get_goods_detail":
-        return None
-    try:
-        d = json.loads(m.text)
-    except ValueError:
-        return None
-    if not d.get("available"):
+    d = _tool_json(m, "get_goods_detail")
+    if not d or not d.get("available"):
         return None
     return {k: d.get(k) for k in ("id", "title", "price", "conditionLevel", "campusName", "coverUrl")}
+
+
+def listing_draft(m: ToolMessage) -> dict[str, Any] | None:
+    """用户确认后的发布草稿，前端拿去预填发布页。"""
+    d = _tool_json(m, "suggest_listing")
+    return d["draft"] if d and d.get("status") == "confirmed" else None
+
+
+async def cancel_pending(graph: CompiledStateGraph, config: dict[str, Any]) -> None:
+    """会话里还有没确认的写操作时，用户直接发了新消息：给这些工具调用补上「已取消」结果，再开始新一轮。"""
+    state = await graph.aget_state(config)
+    if not state.interrupts:
+        return
+    last = state.values["messages"][-1]
+    cancelled = json.dumps({"status": "cancelled", "reason": CANCELLED_BY_NEW_MESSAGE}, ensure_ascii=False)
+    await graph.aupdate_state(config, {"messages": [
+        ToolMessage(cancelled, tool_call_id=tc["id"], name=tc["name"]) for tc in last.tool_calls
+    ]}, as_node="tools")
+
+
+async def guarded_context(st: AppState, token: str, me: dict[str, Any]) -> RequestContext:
+    retry_after = await check_rate(st.redis, me["id"], st.settings.ai_rate_per_minute, st.settings.ai_rate_per_day)
+    if retry_after is not None:
+        raise HTTPException(429, "提问太频繁，请稍后再试", headers={"Retry-After": str(retry_after)})
+    categories, campuses = await st.meta()
+    return RequestContext(token=token, user=me, java=st.java, goods_index=st.goods_index,
+                          categories=categories, campuses=campuses, rules_index=st.rules_index)
+
+
+def sse_response(gen: AsyncIterator[str]) -> StreamingResponse:
+    return StreamingResponse(gen, media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @app.post("/api/v1/ai/chat")
 async def chat(body: ChatRequest, user: tuple[str, dict[str, Any]] = Depends(current_user),
                st: AppState = Depends(get_app_state)) -> StreamingResponse:
     token, me = user
-    retry_after = await check_rate(st.redis, me["id"], st.settings.ai_rate_per_minute, st.settings.ai_rate_per_day)
-    if retry_after is not None:
-        raise HTTPException(429, "提问太频繁，请稍后再试", headers={"Retry-After": str(retry_after)})
-    categories, campuses = await st.meta()
-    ctx = RequestContext(token=token, user=me, java=st.java, goods_index=st.goods_index,
-                         categories=categories, campuses=campuses, rules_index=st.rules_index)
+    prefix = st.settings.upload_public_base_url.rstrip("/") + "/"
+    if any(not u.startswith(prefix) for u in body.images):
+        raise HTTPException(400, "图片必须先上传到平台")
+    ctx = await guarded_context(st, token, me)
     conv_id = body.conversationId or str(uuid.uuid4())
-    return StreamingResponse(stream_chat(st, ctx, conv_id, body.message), media_type="text/event-stream",
-                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    await cancel_pending(st.graph, thread_config(ctx, conv_id))
+    message = HumanMessage(human_content(body.message, body.images))
+    return sse_response(stream_chat(st, ctx, conv_id, {"messages": [message]}))
+
+
+@app.post("/api/v1/ai/chat/{conversation_id}/resume")
+async def resume(body: ResumeRequest, conversation_id: str = PathParam(pattern=CONV_ID_PATTERN),
+                 user: tuple[str, dict[str, Any]] = Depends(current_user),
+                 st: AppState = Depends(get_app_state)) -> StreamingResponse:
+    """确认卡片的回调：用户确认 / 修改后确认 / 取消一个写操作。"""
+    token, me = user
+    ctx = await guarded_context(st, token, me)
+    state = await st.graph.aget_state(thread_config(ctx, conversation_id))
+    if body.interruptId not in {i.id for i in state.interrupts}:
+        raise HTTPException(409, "没有待确认的操作，可能已处理或已取消")
+    command = Command(resume={body.interruptId: {"decision": body.decision, "edits": body.edits}})
+    return sse_response(stream_chat(st, ctx, conversation_id, command))
 
 
 @app.get("/api/v1/ai/memory")

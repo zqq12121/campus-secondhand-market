@@ -16,6 +16,8 @@ class Settings(BaseSettings):
 
     # Java 后端
     backend_base_url: str = "http://localhost:8080"
+    # 与 Java 的 UPLOAD_PUBLIC_BASE_URL 一致：用户图片必须是这个前缀下的地址
+    upload_public_base_url: str = "http://localhost:8080/uploads"
 
     # Redis（与 Java 共用实例）
     redis_host: str = "localhost"
