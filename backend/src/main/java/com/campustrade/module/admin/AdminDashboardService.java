@@ -95,14 +95,15 @@ public class AdminDashboardService {
     public void backfillOnStartup() {
         try {
             LocalDate today = LocalDate.now();
+            // 聚合函数在空表上返回一行 NULL，需先滤掉再 findFirst（否则 NPE）
             Object last = statMapper.selectObjs(new QueryWrapper<StatDaily>().select("MAX(stat_date)"))
-                    .stream().findFirst().orElse(null);
+                    .stream().filter(java.util.Objects::nonNull).findFirst().orElse(null);
             LocalDate from;
             if (last != null) {
                 from = last instanceof java.sql.Date d ? d.toLocalDate() : (LocalDate) last;
             } else {
                 Object first = userMapper.selectObjs(new QueryWrapper<com.campustrade.entity.User>()
-                        .select("MIN(created_at)")).stream().findFirst().orElse(null);
+                        .select("MIN(created_at)")).stream().filter(java.util.Objects::nonNull).findFirst().orElse(null);
                 from = first instanceof LocalDateTime t ? t.toLocalDate() : today;
             }
             if (from.isBefore(today.minusDays(MAX_BACKFILL_DAYS))) {
