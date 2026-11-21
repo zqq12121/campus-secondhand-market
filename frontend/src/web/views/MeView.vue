@@ -143,6 +143,7 @@ onMounted(async () => {
           <RouterLink class="active" to="/me"><AppIcon name="user" />我的主页</RouterLink>
           <RouterLink to="/orders"><AppIcon name="file" />我的订单</RouterLink>
           <RouterLink to="/notifications"><AppIcon name="bell" />消息通知</RouterLink>
+          <RouterLink to="/me/preferences"><AppIcon name="sliders" />助手偏好</RouterLink>
           <button type="button" @click="openProfile"><AppIcon name="edit" />编辑资料</button>
           <button type="button" @click="pwdOpen = true"><AppIcon name="lock" />修改密码</button>
           <button type="button" @click="logout"><AppIcon name="logout" />退出登录</button>

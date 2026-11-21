@@ -7,6 +7,7 @@ import ImageUploader from '@/shared/components/ImageUploader.vue'
 import { CONDITION } from '@/shared/enums'
 import type { GoodsForm } from '@/shared/types'
 import { commonApi, goodsApi } from '../api'
+import { LISTING_DRAFT_KEY, type ListingDraft } from '../assistant/api'
 import { useAuthStore } from '../stores/auth'
 import { useMetaStore } from '../stores/meta'
 
@@ -39,6 +40,7 @@ onMounted(async () => {
   await Promise.all([meta.load(), auth.me ? null : auth.fetchMe()])
   form.campusId = auth.me?.campusId ?? meta.campuses[0]?.id ?? ''
   form.parentCategoryId = meta.categories[0]?.id ?? ''
+  if (!editId.value && route.query.from === 'assistant') fillFromAssistant()
   if (editId.value) {
     const g = await goodsApi.detail(editId.value)
     if (!g.isMine) { ElMessage.error('只能编辑自己的商品'); return router.replace('/') }
@@ -50,6 +52,22 @@ onMounted(async () => {
     })
   }
 })
+
+/** 校园二手助手生成并经用户确认的草稿：只预填，仍由用户检查后自己提交 */
+function fillFromAssistant() {
+  let draft: ListingDraft | null = null
+  try {
+    draft = JSON.parse(sessionStorage.getItem(LISTING_DRAFT_KEY) ?? 'null')
+    sessionStorage.removeItem(LISTING_DRAFT_KEY)
+  } catch { /* 草稿读不到就按空表单 */ }
+  if (!draft) return
+  Object.assign(form, {
+    images: draft.images, title: draft.title, description: draft.description, categoryId: draft.categoryId,
+    conditionLevel: draft.conditionLevel, price: String(draft.price),
+    parentCategoryId: meta.categories.find((c) => c.children?.some((x) => x.id === draft!.categoryId))?.id ?? form.parentCategoryId,
+  })
+  ElMessage.info('已填入助手生成的草稿，请检查图片和信息后再发布')
+}
 
 function validate(): boolean {
   Object.keys(errors).forEach((k) => delete errors[k])

@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import SiteHeader from './components/SiteHeader.vue'
 import TabBar from './components/TabBar.vue'
+import AssistantWidget from './assistant/AssistantWidget.vue'
 import { useAuthStore } from './stores/auth'
 import { useUnreadStore } from './stores/unread'
 import { connect, disconnect, on, USE_MOCK } from './realtime'
@@ -43,5 +44,6 @@ onBeforeUnmount(() => { offs.forEach((f) => f()); clearInterval(timer) })
     <SiteHeader v-if="!route.meta.bare" />
     <RouterView :key="route.path" />
     <TabBar v-if="!route.meta.bare" />
+    <AssistantWidget />
   </el-config-provider>
 </template>
