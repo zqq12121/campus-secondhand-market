@@ -49,6 +49,8 @@ services:
       RABBITMQ_PORT: 5672
       # 经 Nginx 转发，按 X-Forwarded-For 取真实 IP（限流按 IP 计）
       SERVER_FORWARD_HEADERS_STRATEGY: native
+      # 固定为数据卷路径，避免 .env 里给本机开发用的相对路径把文件写到卷外（重建容器即丢失）
+      UPLOAD_DIR: /app/uploads
       UPLOAD_PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8088}/uploads
       PAY_RETURN_URL: ${PUBLIC_BASE_URL:-http://localhost:8088}/order/{orderId}?from=alipay
     volumes:

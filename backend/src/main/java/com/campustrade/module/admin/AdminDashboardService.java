@@ -87,26 +87,33 @@ public class AdminDashboardService {
         refresh(today);
     }
 
-    /** 首次启动（stat_daily 为空）时按历史数据回填，否则看板累计值为 0 */
+    /**
+     * 启动时补算：stat_daily 为空则从最早注册日回填（否则看板累计值为 0）；
+     * 否则从最后一条记录那天补到今天，停机期间漏掉的日期和当天数据不必等到下一个整点。
+     */
     @EventListener(ApplicationReadyEvent.class)
-    public void backfillIfEmpty() {
+    public void backfillOnStartup() {
         try {
-            if (statMapper.selectCount(null) > 0) {
-                return;
-            }
-            Object first = userMapper.selectObjs(new QueryWrapper<com.campustrade.entity.User>()
-                    .select("MIN(created_at)")).stream().findFirst().orElse(null);
             LocalDate today = LocalDate.now();
-            LocalDate from = first instanceof LocalDateTime t ? t.toLocalDate() : today;
+            Object last = statMapper.selectObjs(new QueryWrapper<StatDaily>().select("MAX(stat_date)"))
+                    .stream().findFirst().orElse(null);
+            LocalDate from;
+            if (last != null) {
+                from = last instanceof java.sql.Date d ? d.toLocalDate() : (LocalDate) last;
+            } else {
+                Object first = userMapper.selectObjs(new QueryWrapper<com.campustrade.entity.User>()
+                        .select("MIN(created_at)")).stream().findFirst().orElse(null);
+                from = first instanceof LocalDateTime t ? t.toLocalDate() : today;
+            }
             if (from.isBefore(today.minusDays(MAX_BACKFILL_DAYS))) {
                 from = today.minusDays(MAX_BACKFILL_DAYS);
             }
             for (LocalDate d = from; !d.isAfter(today); d = d.plusDays(1)) {
                 refresh(d);
             }
-            log.info("stat_daily 回填完成：{} ~ {}", from, today);
+            log.info("stat_daily 补算完成：{} ~ {}", from, today);
         } catch (RuntimeException e) {
-            log.error("stat_daily 回填失败", e);
+            log.error("stat_daily 补算失败", e);
         }
     }
 

@@ -116,7 +116,7 @@ onMounted(() => {
     <div class="tabs" style="padding: 0 16px" role="tablist">
       <button v-if="auth.can('system:admin')" class="tab" :class="{ active: tab === 'adm' }" role="tab" @click="tab = 'adm'">管理员</button>
       <button v-if="auth.can('system:role')" class="tab" :class="{ active: tab === 'role' }" role="tab" @click="tab = 'role'">角色权限</button>
-      <button v-if="auth.can('system:log')" class="tab" :class="{ active: tab === 'log' }" role="tab" @click="tab = 'log'">操作日志</button>
+      <button v-if="auth.can('system:log')" class="tab" :class="{ active: tab === 'log' }" role="tab" @click="tab = 'log'; loadLogs(1)">操作日志</button>
     </div>
 
     <div v-if="tab === 'adm'">

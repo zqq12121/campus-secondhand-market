@@ -321,7 +321,8 @@ public class ChatService {
     private Map<Long, GoodsCardVO> goodsCards(List<Long> ids) {
         List<Long> valid = ids.stream().filter(java.util.Objects::nonNull).distinct().toList();
         if (valid.isEmpty()) {
-            return Map.of();
+            // 调用方会 get(null)（会话未关联商品），Map.of() 遇到 null 键会抛 NPE
+            return Collections.emptyMap();
         }
         return goodsMapper.selectByIds(valid).stream().collect(Collectors.toMap(Goods::getId,
                 g -> new GoodsCardVO(g.getId(), g.getTitle(), g.getCoverUrl(), g.getPrice(), g.getStatus(),
