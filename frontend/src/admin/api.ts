@@ -100,6 +100,7 @@ export const systemApi = {
   resetAdminPassword: (id: Id, password: string) => http.put<null>(`/admins/${id}/password`, { password }),
   roles: () => http.get<Role[]>('/roles'),
   createRole: (code: string, name: string) => http.post<{ id: Id }>('/roles', { code, name }),
+  renameRole: (id: Id, name: string) => http.put<null>(`/roles/${id}`, { name }),
   removeRole: (id: Id) => http.del<null>(`/roles/${id}`),
   permissions: () => http.get<Permission[]>('/permissions'),
   rolePermissions: (id: Id) => http.get<Id[]>(`/roles/${id}/permissions`),

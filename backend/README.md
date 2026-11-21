@@ -19,6 +19,7 @@ Spring Boot 3.5 + MyBatis-Plus + Spring Security（JWT）+ MySQL 8 + Redis + Rab
 | 后台：登录、商品审核与管理、用户管理、操作日志 | 13.1 / 13.3–13.5 | 已完成 |
 | 后台：订单查询、纠纷裁决 | 13.6–13.7 | V1.1 完成 |
 | 求购广场（含到期自动过期）、用户举报 | 6、12 | V1.2 完成 |
+| 求购匹配通知（商品上架 / 审核通过后异步匹配）、「我有」发起会话校验 `wantId` | 5.4、6、7.1、13.3 | V1.2 完成 |
 | 后台：举报处理（成立时下架/关帖/扣分/封禁，同对象待处理举报一并处理） | 13.8 | V1.2 完成 |
 | 后台：分类管理（两级、启停级联、批量排序、删除校验） | 13.9 | V1.2 完成 |
 | 后台：数据看板（`stat_daily` 每小时汇总，首次启动自动回填） | 13.2 | V1.2 完成 |
@@ -52,6 +53,24 @@ Spring Boot 3.5 + MyBatis-Plus + Spring Security（JWT）+ MySQL 8 + Redis + Rab
 - 首次启动且库里没有管理员时，用 `ADMIN_INIT_USERNAME` / `ADMIN_INIT_PASSWORD` 创建超级管理员。
 - 前端联调：在 `frontend/` 下执行 `npm run dev:real`，`/api` 和 `/ws` 会代理到 8080。
 - RabbitMQ 管理台：http://localhost:15672（guest / guest，仅本地）。
+
+### 测试
+
+```bash
+cd backend && mvn test
+```
+
+单元测试不依赖数据库和中间件：订单状态机、信用等级、敏感词 DFA、敏感词批量导入、求购匹配、「我有」的 `wantId` 校验。
+
+### Docker 部署（后端 + 前端）
+
+```bash
+set -a && source .env && set +a && docker compose --profile app up -d --build
+```
+
+- 不带 `--profile app` 时只起 MySQL / Redis / RabbitMQ，和本地开发一致。
+- 前端镜像用 Nginx 托管用户端（`/`）和后台（`/admin/`），并把 `/api`、`/ws`、`/uploads` 转发到后端容器。访问地址为 `http://localhost:${WEB_PORT}`，默认端口 8088。
+- `.env` 里的 `PUBLIC_BASE_URL` 是浏览器访问站点的地址，图片地址和支付宝返回地址都由它生成。上传文件存放在 `uploads` 数据卷里。
 
 ### 支付模式
 
@@ -101,4 +120,5 @@ com.campustrade
 - **售后暂停自动确认**：不加字段。自动确认时间 = 交货时间 + 7 天 + 历次已关闭的收货前退款持续时长。
 - **实时推送**：STOMP 简单代理，`/user/queue/messages|notifications|errors`；推送在事务提交后发送，CONNECT 帧用用户端 JWT 鉴权。
 - **审核策略**：敏感词未命中且信用分 ≥ 80 时直接上架，其余转人工审核，每次都写 `audit_record`。
+- **求购匹配**：商品进入在售状态后（自动审核通过或人工审核通过），在事务提交后异步匹配同校、同二级分类、价格落在预算内的进行中求购，排除卖家本人和拉黑了卖家的求购者，单个商品最多通知 100 个求购帖。Redis 记录「求购帖 + 商品」，30 天内不重复通知。
 - **上传**：V1.0 存本地磁盘（`UPLOAD_DIR`），通过 `/uploads/**` 访问；按文件头校验，只允许 jpg/png/webp。

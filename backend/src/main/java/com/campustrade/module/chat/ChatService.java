@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.campustrade.common.Biz;
 import com.campustrade.common.BizException;
 import com.campustrade.common.Consts.UserStatus;
+import com.campustrade.common.Consts.WantStatus;
 import com.campustrade.common.CreditLevel;
 import com.campustrade.common.ErrorCode;
 import com.campustrade.common.PageQuery;
@@ -15,6 +16,7 @@ import com.campustrade.entity.Conversation;
 import com.campustrade.entity.Goods;
 import com.campustrade.entity.Message;
 import com.campustrade.entity.User;
+import com.campustrade.entity.WantPost;
 import com.campustrade.infra.FileStorageService;
 import com.campustrade.infra.OnlineTracker;
 import com.campustrade.infra.RateLimiter;
@@ -23,6 +25,7 @@ import com.campustrade.infra.SensitiveWordService;
 import com.campustrade.mapper.ConversationMapper;
 import com.campustrade.mapper.GoodsMapper;
 import com.campustrade.mapper.MessageMapper;
+import com.campustrade.mapper.WantPostMapper;
 import com.campustrade.module.user.UserService;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.validation.constraints.Max;
@@ -65,6 +68,7 @@ public class ChatService {
     private final ConversationMapper conversationMapper;
     private final MessageMapper messageMapper;
     private final GoodsMapper goodsMapper;
+    private final WantPostMapper wantMapper;
     private final UserService userService;
     private final SensitiveWordService sensitiveWordService;
     private final FileStorageService fileStorageService;
@@ -121,6 +125,13 @@ public class ChatService {
         userService.require(req.peerUserId());
         if (req.goodsId() != null) {
             Biz.notNull(goodsMapper.selectById(req.goodsId()), ErrorCode.GOODS_NOT_FOUND);
+        }
+        if (req.wantId() != null) {
+            // 「我有」：只能找求购帖作者，且帖子仍在进行中（会话不记录 wantId）
+            WantPost w = wantMapper.selectById(req.wantId());
+            Biz.check(w != null && w.getStatus() == WantStatus.ACTIVE && w.getExpireAt().isAfter(LocalDateTime.now()),
+                    ErrorCode.WANT_NOT_FOUND);
+            Biz.check(w.getUserId().equals(req.peerUserId()), ErrorCode.BAD_REQUEST, "只能联系求购发布者");
         }
         Conversation c = getOrCreate(me, req.peerUserId(), req.goodsId());
         return detail(me, c.getId());

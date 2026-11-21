@@ -76,6 +76,14 @@ async function addRole() {
     loadRoles()
   } catch (e) { ignoreCancel(e) }
 }
+async function renameRole(r: Role) {
+  try {
+    const { value } = await ElMessageBox.prompt('新的角色名称', '修改角色', { inputValue: r.name, inputPattern: /^\S.{0,31}$/, inputErrorMessage: '名称 1～32 字', confirmButtonText: '保存', cancelButtonText: '取消' })
+    await systemApi.renameRole(r.id, value.trim())
+    if (currentRole.value?.id === r.id) currentRole.value.name = value.trim()
+    loadRoles()
+  } catch (e) { ignoreCancel(e) }
+}
 async function delRole(r: Role) {
   try {
     await ElMessageBox.confirm(`删除角色「${r.name}」？`, '删除角色', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' })
@@ -133,7 +141,10 @@ onMounted(() => {
       <aside class="role-list">
         <button v-for="r in roles" :key="r.id" type="button" class="role-item" :class="{ active: currentRole?.id === r.id }" @click="pickRole(r)">
           <span>{{ r.name }}<br /><span class="subtle">{{ r.code }} · {{ r.adminCount }} 人</span></span>
-          <span v-if="!r.builtIn" class="del" role="button" tabindex="0" :aria-label="`删除角色 ${r.name}`" @click.stop="delRole(r)" @keydown.enter.stop="delRole(r)"><AppIcon name="trash" size="sm" /></span>
+          <span class="ops">
+            <span class="del" role="button" tabindex="0" :aria-label="`修改角色 ${r.name}`" @click.stop="renameRole(r)" @keydown.enter.stop="renameRole(r)"><AppIcon name="edit" size="sm" /></span>
+            <span v-if="!r.builtIn" class="del" role="button" tabindex="0" :aria-label="`删除角色 ${r.name}`" @click.stop="delRole(r)" @keydown.enter.stop="delRole(r)"><AppIcon name="trash" size="sm" /></span>
+          </span>
         </button>
         <button class="btn btn-ghost btn-sm" @click="addRole"><AppIcon name="plus" size="sm" />新增角色</button>
       </aside>
@@ -187,6 +198,7 @@ onMounted(() => {
 .role-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-radius: 10px; border: 0; background: none; text-align: left; cursor: pointer; font: inherit; color: inherit; }
 .role-item:hover { background: #F1F5F9; }
 .role-item.active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+.ops { display: flex; gap: 2px; }
 .del { color: var(--text-3); padding: 4px; border-radius: 6px; }
 .del:hover { color: var(--danger); }
 .perm-box { padding: 16px 24px; }
