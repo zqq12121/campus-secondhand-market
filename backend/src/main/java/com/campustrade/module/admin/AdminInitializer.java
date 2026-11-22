@@ -43,7 +43,8 @@ public class AdminInitializer implements ApplicationRunner {
     static {
         MENUS.put("dashboard", new String[]{"数据看板", "dashboard:view=数据看板"});
         MENUS.put("goods", new String[]{"商品", "goods:audit=商品审核", "goods:manage=商品管理"});
-        MENUS.put("user", new String[]{"用户", "user:view=用户查看", "user:punish=禁言/封禁/解封", "user:credit=调整信用分"});
+        MENUS.put("user", new String[]{"用户", "user:view=用户查看", "user:punish=禁言/封禁/解封", "user:credit=调整信用分",
+                "user:credit-appeal=信用分申诉处理"});
         MENUS.put("trade", new String[]{"交易", "order:view=订单查询", "dispute:handle=纠纷裁决", "report:handle=举报处理"});
         MENUS.put("content", new String[]{"运营", "category:manage=分类管理", "content:manage=公告/轮播/敏感词"});
         MENUS.put("system", new String[]{"系统", "system:admin=管理员账号", "system:role=角色与权限", "system:log=操作日志"});

@@ -45,6 +45,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -62,6 +63,8 @@ public class OrderService {
 
     private static final DateTimeFormatter NO_PREFIX = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
     private static final int STOCK_RETRY = 3;
+    private static final int MEET_CODE_MAX_FAIL = 5;
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     private final TradeOrderMapper orderMapper;
     private final OrderLogMapper logMapper;
@@ -181,8 +184,9 @@ public class OrderService {
     @Transactional
     public void sellerConfirm(long userId, long orderId) {
         TradeOrder o = requireParty(userId, orderId);
+        String meetCode = String.format("%06d", RANDOM.nextInt(1_000_000));
         flow.transit(o, OrderStateMachine.SELLER_CONFIRM, roleOf(o, userId), userId, null, null,
-                w -> w.set(TradeOrder::getSellerConfirmedAt, LocalDateTime.now()));
+                w -> w.set(TradeOrder::getSellerConfirmedAt, LocalDateTime.now()).set(TradeOrder::getMeetCode, meetCode));
         delayPublisher.schedule(DelayType.AUTO_COMPLETE, orderId, null);
     }
 
@@ -190,6 +194,23 @@ public class OrderService {
     public void complete(long userId, long orderId) {
         TradeOrder o = requireParty(userId, orderId);
         flow.finish(o, OrderStateMachine.COMPLETE, roleOf(o, userId), userId);
+    }
+
+    /** 面交核销：卖家输入买家出示的 6 位码完成交易；同一订单错 5 次后锁定，只能由买家确认完成 */
+    @Transactional
+    public void verifyMeetCode(long userId, long orderId, String code) {
+        TradeOrder o = requireParty(userId, orderId);
+        Biz.check(roleOf(o, userId) == Operator.SELLER && o.getStatus() == OrderStatus.WAIT_MEET,
+                ErrorCode.ORDER_STATE_INVALID);
+        String failKey = "order:meet:fail:" + orderId;
+        String fails = redis.opsForValue().get(failKey);
+        Biz.check(fails == null || Integer.parseInt(fails) < MEET_CODE_MAX_FAIL, ErrorCode.MEET_CODE_LOCKED);
+        if (o.getMeetCode() == null || !o.getMeetCode().equals(code.trim())) {
+            redis.opsForValue().increment(failKey);
+            redis.expire(failKey, Duration.ofDays(8));
+            throw new BizException(ErrorCode.MEET_CODE_WRONG);
+        }
+        flow.finish(o, OrderStateMachine.VERIFY_MEET_CODE, Operator.SELLER, userId);
     }
 
     @Transactional
@@ -283,7 +304,8 @@ public class OrderService {
                 new Timeline(o.getCreatedAt(), o.getSellerConfirmedAt(), o.getPaidAt(), o.getDeliveredAt(),
                         o.getFinishedAt(), o.getCanceledAt()),
                 deadline, o.getCancelReason(), o.getCancelBy(), paymentService.view(o.getId()),
-                afterSaleService.latestOf(o.getId(), role), review, actions, logs);
+                afterSaleService.latestOf(o.getId(), role), review, actions, logs,
+                role == Operator.BUYER && o.getStatus() == OrderStatus.WAIT_MEET ? o.getMeetCode() : null);
     }
 
     private List<String> actions(TradeOrder o, int role, boolean reviewed) {

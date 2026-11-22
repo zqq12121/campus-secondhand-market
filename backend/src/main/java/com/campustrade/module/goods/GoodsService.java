@@ -73,6 +73,7 @@ public class GoodsService {
     private final FileStorageService fileStorageService;
     private final StringRedisTemplate redis;
     private final StockCache stockCache;
+    private final PriceDropService priceDropService;
     private final AppProperties props;
 
     // ------------------------------------------------------------------ 浏览
@@ -214,6 +215,7 @@ public class GoodsService {
                 || !Objects.equals(g.getDescription(), req.description().trim())
                 || !Objects.equals(g.getCategoryId(), req.categoryId())
                 || !oldImages.equals(req.images());
+        BigDecimal oldPrice = g.getPrice();
         fill(g, req, seller);
         goodsMapper.updateById(g);
         TxUtil.afterCommit(() -> stockCache.evict(id));
@@ -223,6 +225,9 @@ public class GoodsService {
         }
         boolean keepDraft = Boolean.TRUE.equals(req.draft()) && st == GoodsStatus.DRAFT;
         if (keepDraft || (st == GoodsStatus.ON_SALE && !contentChanged)) {
+            if (st == GoodsStatus.ON_SALE) {
+                priceDropService.onPriceChanged(g, oldPrice);
+            }
             return new SaveResp(id, st, List.of());
         }
         if (st == GoodsStatus.DRAFT || st == GoodsStatus.REJECTED || st == GoodsStatus.OFF_SHELF) {

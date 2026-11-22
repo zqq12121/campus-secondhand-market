@@ -36,7 +36,8 @@ public final class UserDtos {
     }
 
     public record CreditLogVO(Long id, Integer delta, Integer scoreAfter, Integer reasonType, String reasonText,
-                              Long refId, String remark, LocalDateTime createdAt) {
+                              Long refId, String remark, LocalDateTime createdAt,
+                              boolean appealable, Integer appealStatus) {
     }
 
     public record BalanceLogVO(Long id, String amount, BigDecimal balanceAfter, Integer type, Long orderId,
@@ -48,6 +49,7 @@ public final class UserDtos {
 
     public record ProfileVO(Long id, String nickname, String avatarUrl, String college, String campusName, String bio,
                             Integer creditScore, String creditLevel, boolean badge, String goodRate, int reviewCount,
-                            int onSaleCount, int soldCount, boolean blocked, Integer status, LocalDate joinedAt) {
+                            int onSaleCount, int soldCount, boolean blocked, Integer status, LocalDate joinedAt,
+                            boolean followed, int followerCount) {
     }
 }

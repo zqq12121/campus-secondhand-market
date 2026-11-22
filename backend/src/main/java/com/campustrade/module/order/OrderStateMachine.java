@@ -17,6 +17,8 @@ public final class OrderStateMachine {
     public static final String CREATE = "CREATE";
     public static final String SELLER_CONFIRM = "SELLER_CONFIRM";
     public static final String COMPLETE = "COMPLETE";
+    /** 面交：卖家输入买家出示的核销码完成交易 */
+    public static final String VERIFY_MEET_CODE = "VERIFY_MEET_CODE";
     public static final String CANCEL = "CANCEL";
     public static final String PAY = "PAY";
     public static final String DELIVER = "DELIVER";
@@ -52,6 +54,7 @@ public final class OrderStateMachine {
         Set<Integer> sys = Set.of(Operator.SYSTEM);
         rule(SELLER_CONFIRM, Set.of(OrderStatus.WAIT_SELLER_CONFIRM), s, OrderStatus.WAIT_MEET);
         rule(COMPLETE, Set.of(OrderStatus.WAIT_MEET), b, OrderStatus.FINISHED);
+        rule(VERIFY_MEET_CODE, Set.of(OrderStatus.WAIT_MEET), s, OrderStatus.FINISHED);
         rule(CANCEL, Set.of(OrderStatus.WAIT_SELLER_CONFIRM, OrderStatus.WAIT_MEET, OrderStatus.WAIT_PAY),
                 Set.of(Operator.BUYER, Operator.SELLER), OrderStatus.CANCELED);
         rule(AUTO_CANCEL_UNCONFIRMED, Set.of(OrderStatus.WAIT_SELLER_CONFIRM), sys, OrderStatus.CANCELED);
@@ -90,7 +93,7 @@ public final class OrderStateMachine {
 
     /** 买卖双方在订单上可点的按钮（售后相关按钮在售后详情的 actions 中） */
     public static List<String> userActions(int status, int operator) {
-        return List.of(SELLER_CONFIRM, COMPLETE, PAY, CANCEL, DELIVER, CONFIRM_RECEIPT, APPLY_CANCEL, APPLY_REFUND)
+        return List.of(SELLER_CONFIRM, COMPLETE, VERIFY_MEET_CODE, PAY, CANCEL, DELIVER, CONFIRM_RECEIPT, APPLY_CANCEL, APPLY_REFUND)
                 .stream().filter(a -> PAY.equals(a)
                         ? status == OrderStatus.WAIT_PAY && operator == Operator.BUYER
                         : next(status, a, operator, null) != null)
