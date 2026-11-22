@@ -11,6 +11,7 @@ import com.campustrade.config.AppProperties;
 import com.campustrade.entity.Campus;
 import com.campustrade.entity.School;
 import com.campustrade.entity.User;
+import com.campustrade.infra.CaptchaService;
 import com.campustrade.infra.MailService;
 import com.campustrade.infra.RateLimiter;
 import com.campustrade.mapper.CampusMapper;
@@ -42,6 +43,8 @@ public class AuthService {
 
     public static final Pattern PASSWORD = Pattern.compile("^(?=.*[A-Za-z])(?=.*\\d).{8,20}$");
     private static final SecureRandom RANDOM = new SecureRandom();
+    /** 连续失败达到此次数后，登录需要图形验证码 */
+    static final int CAPTCHA_AFTER_FAILS = 3;
 
     private final UserMapper userMapper;
     private final SchoolMapper schoolMapper;
@@ -52,6 +55,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final TokenStore tokenStore;
+    private final CaptchaService captchaService;
     private final AppProperties props;
 
     public void sendCode(String rawEmail, String scene, String ip) {
@@ -97,7 +101,7 @@ public class AuthService {
         return loginResp(userMapper.selectById(user.getId()));
     }
 
-    public LoginResp login(String rawEmail, String password) {
+    public LoginResp login(String rawEmail, String password, String captchaId, String captchaCode) {
         String email = normalize(rawEmail);
         AppProperties.Rules r = props.rules();
         String lockKey = "login:lock:" + email;
@@ -105,9 +109,14 @@ public class AuthService {
         if (lockTtl != null && lockTtl > 0) {
             throw BizException.of(ErrorCode.ACCOUNT_LOCKED, Map.of("retryAfter", lockTtl.intValue()));
         }
+        String failKey = "login:fail:" + email;
+        String failed = redis.opsForValue().get(failKey);
+        if (failed != null && Integer.parseInt(failed) >= CAPTCHA_AFTER_FAILS) {
+            Biz.check(captchaId != null && !captchaId.isBlank(), ErrorCode.CAPTCHA_REQUIRED);
+            captchaService.verify(captchaId, captchaCode);
+        }
         User user = findByEmail(email);
         if (user == null || !passwordEncoder.matches(password, user.getPasswordHash())) {
-            String failKey = "login:fail:" + email;
             Long fails = redis.opsForValue().increment(failKey);
             if (fails != null && fails == 1) {
                 redis.expire(failKey, Duration.ofMinutes(r.loginLockMinutes()));
@@ -118,14 +127,15 @@ public class AuthService {
                 throw BizException.of(ErrorCode.ACCOUNT_LOCKED, Map.of("retryAfter", r.loginLockMinutes() * 60));
             }
             long remaining = r.loginMaxFail() - (fails == null ? 0 : fails);
-            throw BizException.of(ErrorCode.BAD_CREDENTIALS, Map.of("remainingAttempts", (int) remaining));
+            throw BizException.of(ErrorCode.BAD_CREDENTIALS, Map.of("remainingAttempts", (int) remaining,
+                    "captchaRequired", fails != null && fails >= CAPTCHA_AFTER_FAILS));
         }
         if (isBanned(user)) {
             Map<String, Object> data = new HashMap<>();
             data.put("banUntil", user.getBanUntil());
             throw BizException.of(ErrorCode.ACCOUNT_BANNED, data);
         }
-        redis.delete("login:fail:" + email);
+        redis.delete(failKey);
         userMapper.update(new LambdaUpdateWrapper<User>().eq(User::getId, user.getId())
                 .set(User::getLastLoginAt, LocalDateTime.now()));
         return loginResp(user);

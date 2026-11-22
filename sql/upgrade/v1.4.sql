@@ -40,3 +40,7 @@ CREATE TABLE credit_appeal (
 
 ALTER TABLE credit_log
   MODIFY COLUMN reason_type TINYINT NOT NULL COMMENT '1完成交易 2收到好评 3收到差评 4违约取消/爽约 5纠纷败诉 6举报成立 7管理员调整 8申诉通过';
+
+-- 邮件通知开关
+ALTER TABLE `user`
+  ADD COLUMN email_notify TINYINT NOT NULL DEFAULT 0 COMMENT '1 开启邮件通知：订单、审核、举报结果、信用分通知同时发邮件' AFTER last_login_at;

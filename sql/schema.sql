@@ -51,6 +51,7 @@ CREATE TABLE `user` (
   status        TINYINT      NOT NULL DEFAULT 0 COMMENT '0正常 1禁言 2封禁',
   ban_until     DATETIME     DEFAULT NULL COMMENT '禁言/封禁截止时间，NULL 表示永久或未处罚',
   last_login_at DATETIME     DEFAULT NULL,
+  email_notify  TINYINT      NOT NULL DEFAULT 0 COMMENT '1 开启邮件通知：订单、审核、举报结果、信用分通知同时发邮件',
   deleted       TINYINT      NOT NULL DEFAULT 0,
   created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

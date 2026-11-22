@@ -12,7 +12,9 @@ public final class AuthDtos {
     }
 
     public record SendCodeReq(@NotBlank @Email String email,
-                              @NotBlank @Pattern(regexp = "REGISTER|RESET_PASSWORD") String scene) {
+                              @NotBlank @Pattern(regexp = "REGISTER|RESET_PASSWORD") String scene,
+                              @NotBlank String captchaId,
+                              @NotBlank String captchaCode) {
     }
 
     public record RegisterReq(@NotBlank @Email String email,
@@ -22,7 +24,8 @@ public final class AuthDtos {
                               @NotNull Long campusId) {
     }
 
-    public record LoginReq(@NotBlank String email, @NotBlank String password) {
+    /** 登录失败达到一定次数后必须带图形验证码 */
+    public record LoginReq(@NotBlank String email, @NotBlank String password, String captchaId, String captchaCode) {
     }
 
     public record ResetPasswordReq(@NotBlank @Email String email, @NotBlank String code,

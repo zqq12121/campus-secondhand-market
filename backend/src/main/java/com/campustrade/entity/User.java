@@ -52,6 +52,9 @@ public class User {
 
     private LocalDateTime lastLoginAt;
 
+    /** 1 开启邮件通知：订单、审核、举报结果、信用分通知同时发邮件 */
+    private Integer emailNotify;
+
     @TableLogic
     private Integer deleted;
 

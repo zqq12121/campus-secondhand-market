@@ -140,7 +140,7 @@ public class UserService {
         return new MeVO(u.getId(), u.getEmail(), true, u.getNickname(), u.getAvatarUrl(), u.getCollege(),
                 u.getCampusId(), campusName(u.getCampusId()), u.getBio(), u.getCreditScore(),
                 CreditLevel.of(u.getCreditScore()).name(), u.getBalance(), u.getStatus(), u.getBanUntil(), stats,
-                u.getCreatedAt());
+                u.getCreatedAt(), Integer.valueOf(1).equals(u.getEmailNotify()));
     }
 
     public MeVO updateMe(long id, UpdateMeReq req) {
@@ -163,6 +163,10 @@ public class UserService {
             Campus c = campusMapper.selectById(req.campusId());
             Biz.check(c != null && c.getSchoolId().equals(u.getSchoolId()), ErrorCode.BAD_REQUEST, "校区不存在");
             w.set(User::getCampusId, req.campusId());
+            changed = true;
+        }
+        if (req.emailNotify() != null) {
+            w.set(User::getEmailNotify, req.emailNotify() ? 1 : 0);
             changed = true;
         }
         if (req.bio() != null) {

@@ -27,6 +27,8 @@ public enum ErrorCode {
     CREDIT_RESTRICTED(1011, "信用分不足，功能受限"),
     CREDIT_APPEAL_NOT_ALLOWED(1012, "只能申诉 30 天内自己的扣分记录"),
     CREDIT_APPEAL_EXISTS(1013, "这条记录已经申诉过"),
+    CAPTCHA_INVALID(1014, "图形验证码错误或已过期"),
+    CAPTCHA_REQUIRED(1015, "请输入图形验证码"),
     FILE_TYPE_NOT_ALLOWED(1101, "文件类型不允许"),
     FILE_TOO_LARGE(1102, "文件超过 5MB"),
 
