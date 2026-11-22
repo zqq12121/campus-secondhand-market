@@ -2,7 +2,7 @@
 
 Spring Boot 3.5 + MyBatis-Plus + Spring Security（JWT）+ MySQL 8 + Redis + RabbitMQ + WebSocket（STOMP），按 `docs/接口文档.md` 实现。
 
-## 当前进度：V1.3
+## 当前进度：V1.4（P0 / P1 / P2 全部完成）
 
 | 模块 | 接口文档章节 | 状态 |
 | --- | --- | --- |
@@ -26,6 +26,7 @@ Spring Boot 3.5 + MyBatis-Plus + Spring Security（JWT）+ MySQL 8 + Redis + Rab
 | 后台：内容运营（公告/轮播、公告群发通知、敏感词 Redis 广播热更新） | 13.10 | V1.2 完成 |
 | 后台：系统管理（管理员、角色与权限、操作日志查询） | 13.11 | V1.2 完成 |
 | 下单 Redis 预扣库存；售后 `appeal_remark`；求购响应数 `want_response` | 8.1、9.5、6 | V1.3 完成 |
+| P2：图形验证码、关注卖家、降价提醒、面交核销码、信用分申诉、邮件通知、ES 检索、猜你喜欢 | 14 | V1.4 完成 |
 
 ## 本地运行
 
@@ -61,7 +62,7 @@ Spring Boot 3.5 + MyBatis-Plus + Spring Security（JWT）+ MySQL 8 + Redis + Rab
 cd backend && mvn test
 ```
 
-单元测试不依赖数据库和中间件：订单状态机、下单（幂等、Redis 预扣、乐观锁重试）、支付入账（金额校验、重复通知、关单后到账退款）、售后（申请校验、申请介入、同意退款与渠道失败、介入截止时间）、信用等级、敏感词 DFA、敏感词批量导入、求购匹配、「我有」的 `wantId` 校验、看板补算。
+单元测试不依赖数据库和中间件：订单状态机、面交核销码、信用分申诉、图形验证码与登录门槛、关注上新、降价提醒、猜你喜欢、检索索引同步、下单（幂等、Redis 预扣、乐观锁重试）、支付入账（金额校验、重复通知、关单后到账退款）、售后（申请校验、申请介入、同意退款与渠道失败、介入截止时间）、信用等级、敏感词 DFA、敏感词批量导入、求购匹配、「我有」的 `wantId` 校验、看板补算。
 
 ### 已有数据库升级
 
@@ -70,6 +71,17 @@ cd backend && mvn test
 ```bash
 docker exec -i campus-trade-mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" campus_trade' < sql/upgrade/v1.3.sql
 ```
+
+```bash
+docker exec -i campus-trade-mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" campus_trade' < sql/upgrade/v1.4.sql
+```
+
+### 商品搜索引擎
+
+| `SEARCH_ENGINE` | 说明 |
+| --- | --- |
+| `mysql`（默认） | MySQL ngram 全文索引 |
+| `es` | Elasticsearch + smartcn 中文分词。先 `docker compose --profile es up -d` 起 ES（首次会构建镜像），索引不存在时后端自动建索引并全量同步，之后每 30 秒增量同步；ES 出错时自动退回 MySQL |
 
 ### Docker 部署（后端 + 前端）
 
@@ -130,4 +142,6 @@ com.campustrade
 - **实时推送**：STOMP 简单代理，`/user/queue/messages|notifications|errors`；推送在事务提交后发送，CONNECT 帧用用户端 JWT 鉴权。
 - **审核策略**：敏感词未命中且信用分 ≥ 80 时直接上架，其余转人工审核，每次都写 `audit_record`。
 - **求购匹配**：商品进入在售状态后（自动审核通过或人工审核通过），在事务提交后异步匹配同校、同二级分类、价格落在预算内的进行中求购，排除卖家本人和拉黑了卖家的求购者，单个商品最多通知 100 个求购帖。Redis 记录「求购帖 + 商品」，30 天内不重复通知。
+- **P2 异步通知**：求购匹配、关注上新、降价提醒、邮件副本都在事务提交后用 `CompletableFuture` 异步执行，失败只记日志；Redis 记去重键，避免重复打扰。
+- **检索同步**：不在业务代码里埋点，按 `(updated_at, id)` 游标增量同步；读变更用自定义 SQL，绕过 `@TableLogic` 才能看到已删除的商品并从索引删除。
 - **上传**：V1.0 存本地磁盘（`UPLOAD_DIR`），通过 `/uploads/**` 访问；按文件头校验，只允许 jpg/png/webp。
