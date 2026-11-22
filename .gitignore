@@ -21,6 +21,12 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# ===== Python（ai-service） =====
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
 # ===== 环境变量与密钥（严禁提交） =====
 .env
 .env.*

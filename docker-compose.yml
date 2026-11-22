@@ -24,8 +24,12 @@ services:
   redis:
     image: redis:8.2-alpine
     container_name: campus-trade-redis
+    # 开 AOF 持久化：agent 的会话记忆与向量索引存在这里（镜像入口会自动追加向量 / JSON 模块）
+    command: ["redis-server", "--appendonly", "yes"]
     ports:
       - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
 
   rabbitmq:
     image: rabbitmq:4.1-management-alpine
@@ -72,7 +76,30 @@ services:
       - "${WEB_PORT:-8088}:80"
     depends_on:
       - backend
+      - ai
+
+  ai:
+    profiles: ["app"]
+    build: ./ai-service
+    image: campus-trade-ai
+    container_name: campus-trade-ai
+    env_file: .env
+    environment:
+      BACKEND_BASE_URL: http://backend:8080
+      # 与 backend 保持一致：用户图片地址按这个前缀校验，再经 BACKEND_BASE_URL 内网读取
+      UPLOAD_PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8088}/uploads
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    volumes:
+      - hf-cache:/root/.cache/huggingface
+    depends_on:
+      - backend
+      - redis
 
 volumes:
   mysql-data:
   uploads:
+  redis-data:
+  hf-cache:

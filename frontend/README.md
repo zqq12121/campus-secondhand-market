@@ -10,9 +10,18 @@ Vue 3 + TypeScript + Vite + Element Plus + Pinia。按 `docs/接口文档.md` �
 ```bash
 npm install
 npm run dev        # Mock 模式，不需要后端，http://localhost:5180
-npm run dev:real   # 把 /api、/ws 代理到 .env.real 里的 VITE_API_TARGET
+npm run dev:real   # 把 /api、/ws 代理到 .env.real 里的 VITE_API_TARGET；/api/v1/ai 代理到 VITE_AI_TARGET（默认 http://localhost:8090）
 npm run build      # 类型检查 + 生产构建
 ```
+
+## 校园二手助手
+
+登录后右下角的「问助手」浮窗（`src/web/assistant/`）会对接 Python ai-service 的 SSE 接口，后端说明见 `ai-service/README.md`。
+
+- 浮窗支持流式回复、商品卡片、写操作确认卡片，以及上传图片（先传到 `/files`，再把地址交给助手）。
+- 确认后的发布草稿经 sessionStorage 交给 `/publish?from=assistant` 预填，仍由用户自己点发布。
+- 「助手偏好」页在 `/me/preferences`，可以查看和删除助手记住的偏好。
+- 对话只保存在当前标签页的 sessionStorage 里，服务端的 checkpoint 才是对话的真实记录。Mock 模式没有 ai-service，不显示浮窗。
 
 ## Mock 模式（仅本地自测）
 
