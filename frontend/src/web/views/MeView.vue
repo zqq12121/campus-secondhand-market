@@ -206,7 +206,7 @@ onMounted(async () => {
               </template>
               <template v-else-if="tab === 'want'">
                 <div v-for="w in wants" :key="w.id" class="list-item">
-                  <div style="flex: 1; min-width: 0">{{ w.title }}<div class="subtle">{{ w.categoryName }} · {{ shortTime(w.createdAt) }} 发布 · {{ shortTime(w.expireAt) }} 到期</div></div>
+                  <div style="flex: 1; min-width: 0">{{ w.title }}<div class="subtle">{{ w.categoryName }} · {{ shortTime(w.createdAt) }} 发布 · {{ shortTime(w.expireAt) }} 到期 · {{ w.responseCount ?? 0 }} 人响应</div></div>
                   <span class="tag" :class="w.status === 0 ? 'tag-green' : ''">{{ WANT_STATUS[w.status] }}</span>
                   <div class="ops">
                     <button v-if="w.status === 0" class="btn btn-primary btn-sm" @click="wantAction(w, 'close')">已解决</button>

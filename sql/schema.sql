@@ -185,6 +185,15 @@ CREATE TABLE want_post (
   KEY idx_expire (status, expire_at)
 ) COMMENT '求购帖';
 
+CREATE TABLE want_response (
+  id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  want_id      BIGINT UNSIGNED NOT NULL,
+  responder_id BIGINT UNSIGNED NOT NULL COMMENT '点「我有」的用户',
+  created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_want_responder (want_id, responder_id)
+) COMMENT '求购响应：同一用户对同一求购只记一次';
+
 -- ---------------------------------------------------------------------
 -- 三、聊天
 -- ---------------------------------------------------------------------
@@ -293,6 +302,7 @@ CREATE TABLE after_sale (
   refund_amount      DECIMAL(10,2) NOT NULL,
   status             TINYINT      NOT NULL DEFAULT 0 COMMENT '0待卖家处理 1卖家同意 2卖家拒绝 3平台介入中 4裁决退款 5裁决放款 6买家撤销',
   seller_reply       VARCHAR(200) DEFAULT NULL,
+  appeal_remark      VARCHAR(500) DEFAULT NULL COMMENT '买家申请平台介入时的补充说明',
   seller_deadline    DATETIME     NOT NULL COMMENT '卖家处理截止时间，超时自动同意',
   arbitrator_id      BIGINT UNSIGNED DEFAULT NULL COMMENT '裁决管理员',
   arbitration_reason VARCHAR(500) DEFAULT NULL,

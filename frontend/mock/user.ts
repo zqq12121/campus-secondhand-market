@@ -4,7 +4,7 @@ import {
   addCredit, afterSales, ago, anns, balanceLogs, blocks, brief, campusName, campuses, categories, categoryPath, convOf, convs,
   CREDIT_REASON, creditLevel, creditLogs, favorites, fmt, goods, goodsById, hitWordsIn, hotWords, isBlocked, later, maskWords,
   MockError, money, msgs, nextId, nextMsgId, notify, notis, orderLogs, orders, page, payments, peerOf, REVIEW_TAGS, reports,
-  reviews, school, userById, users, wants, type AfterSaleRow, type ConvRow, type GoodsRow, type MsgRow, type OrderRow,
+  reviews, school, userById, users, wantResponses, wants, type AfterSaleRow, type ConvRow, type GoodsRow, type MsgRow, type OrderRow,
 } from './db'
 
 const get = (p: string, a: Auth, h: (c: Ctx) => unknown) => route('U GET', p, a, h)
@@ -259,7 +259,8 @@ export function registerUserRoutes() {
   get('/users/me/favorites', 'user', ({ uid, query }) => page(favorites.filter((f) => f.userId === uid).reverse()
     .map((f) => ({ g: goods.find((x) => x.id === f.goodsId), f })).filter(({ g }) => g && !g.deleted)
     .map(({ g, f }) => ({ ...goodsItem(g!), status: g!.status, favoritedAt: f.createdAt })), query))
-  get('/users/me/wants', 'user', ({ uid, query }) => page(wants.filter((w) => w.userId === uid && !w.deleted && (query.status === undefined || w.status === Number(query.status))).map(wantOut), query))
+  get('/users/me/wants', 'user', ({ uid, query }) => page(wants.filter((w) => w.userId === uid && !w.deleted && (query.status === undefined || w.status === Number(query.status)))
+    .map((w) => ({ ...wantOut(w), isMine: true, responseCount: wantResponses.filter((r) => r.wantId === w.id).length })), query))
   get('/users/me/blocks', 'user', ({ uid, query }) => page(blocks.filter((b) => b.userId === uid).map((b) => ({ userId: b.blockedUserId, nickname: userById(b.blockedUserId)!.nickname, avatarUrl: null, createdAt: b.createdAt })), query))
   post('/users/:id/block', 'user', ({ uid, params }) => {
     if (uid === params.id) return err(400, '不能拉黑自己')
@@ -453,6 +454,11 @@ export function registerUserRoutes() {
     const peer = String(body.peerUserId)
     if (peer === uid) return err(400, '不能和自己聊天')
     if (!userById(peer)) return err(404, '用户不存在')
+    if (body.wantId) {
+      const w = wants.find((x) => x.id === String(body.wantId) && !x.deleted && x.status === 0 && x.expireAt > fmt()) ?? err(3002, '求购帖不存在或已结束')
+      if (w.userId !== peer) return err(400, '只能联系求购发布者')
+      if (!wantResponses.some((r) => r.wantId === w.id && r.responderId === uid)) wantResponses.push({ wantId: w.id, responderId: uid })
+    }
     let c = convOf(uid, peer)
     if (!c) {
       c = { id: nextId(), small: uid < peer ? uid : peer, big: uid < peer ? peer : uid, goodsId: null, lastMessage: null, lastMessageAt: null, smallUnread: 0, bigUnread: 0 }

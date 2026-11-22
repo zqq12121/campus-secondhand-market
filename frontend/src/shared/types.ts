@@ -176,6 +176,8 @@ export interface WantItem {
   id: Id; title: string; description: string | null; categoryId: Id; categoryName: string
   priceMin: Money | null; priceMax: Money | null; campusName: string; status: number
   expireAt: DateTime; user: UserBrief; createdAt: DateTime; isMine?: boolean
+  /** 收到几次「我有」，只有发布者能看到 */
+  responseCount?: number | null
 }
 export interface WantForm {
   title: string; description?: string; categoryId: Id; campusId?: Id

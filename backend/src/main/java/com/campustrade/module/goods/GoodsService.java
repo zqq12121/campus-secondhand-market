@@ -12,6 +12,7 @@ import com.campustrade.common.CreditLevel;
 import com.campustrade.common.ErrorCode;
 import com.campustrade.common.PageQuery;
 import com.campustrade.common.PageResult;
+import com.campustrade.common.TxUtil;
 import com.campustrade.config.AppProperties;
 import com.campustrade.entity.Category;
 import com.campustrade.entity.Favorite;
@@ -19,6 +20,7 @@ import com.campustrade.entity.Goods;
 import com.campustrade.entity.GoodsImage;
 import com.campustrade.entity.User;
 import com.campustrade.infra.FileStorageService;
+import com.campustrade.infra.StockCache;
 import com.campustrade.mapper.FavoriteMapper;
 import com.campustrade.mapper.GoodsImageMapper;
 import com.campustrade.mapper.GoodsMapper;
@@ -70,6 +72,7 @@ public class GoodsService {
     private final HotWordService hotWordService;
     private final FileStorageService fileStorageService;
     private final StringRedisTemplate redis;
+    private final StockCache stockCache;
     private final AppProperties props;
 
     // ------------------------------------------------------------------ 浏览
@@ -213,6 +216,7 @@ public class GoodsService {
                 || !oldImages.equals(req.images());
         fill(g, req, seller);
         goodsMapper.updateById(g);
+        TxUtil.afterCommit(() -> stockCache.evict(id));
         if (!oldImages.equals(req.images())) {
             imageMapper.delete(new LambdaQueryWrapper<GoodsImage>().eq(GoodsImage::getGoodsId, id));
             saveImages(id, req.images());

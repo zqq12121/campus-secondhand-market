@@ -11,12 +11,14 @@ import com.campustrade.common.Consts.OrderStatus;
 import com.campustrade.common.Consts.TradeMode;
 import com.campustrade.common.ErrorCode;
 import com.campustrade.common.PageQuery;
+import com.campustrade.common.TxUtil;
 import com.campustrade.config.AppProperties;
 import com.campustrade.entity.Conversation;
 import com.campustrade.entity.Goods;
 import com.campustrade.entity.OrderLog;
 import com.campustrade.entity.TradeOrder;
 import com.campustrade.entity.User;
+import com.campustrade.infra.StockCache;
 import com.campustrade.infra.mq.DelayPublisher;
 import com.campustrade.infra.mq.DelayType;
 import com.campustrade.mapper.GoodsMapper;
@@ -72,6 +74,7 @@ public class OrderService {
     private final ChatService chatService;
     private final DelayPublisher delayPublisher;
     private final StringRedisTemplate redis;
+    private final StockCache stockCache;
     private final AppProperties props;
 
     // ------------------------------------------------------------------ 下单
@@ -107,6 +110,9 @@ public class OrderService {
         Biz.check(cancels == null || Integer.parseInt(cancels) < props.rules().dailyCancelLimit(),
                 ErrorCode.CANCEL_TOO_MANY);
 
+        Biz.check(stockCache.tryDeduct(req.goodsId(), req.quantity(), () -> onSaleStock(req.goodsId())),
+                ErrorCode.STOCK_NOT_ENOUGH);
+        TxUtil.afterRollback(() -> stockCache.giveBack(req.goodsId(), req.quantity()));
         Goods g = deductStock(buyerId, req);
         boolean guarantee = req.tradeMode() == TradeMode.GUARANTEE;
         if (guarantee) {
@@ -130,6 +136,12 @@ public class OrderService {
         orderMapper.insert(o);
         flow.created(o);
         return o;
+    }
+
+    /** 预扣缓存的初始值：只缓存在售商品，其余情况交给数据库校验报具体错误 */
+    private Integer onSaleStock(long goodsId) {
+        Goods g = goodsMapper.selectById(goodsId);
+        return g != null && g.getStatus() == GoodsStatus.ON_SALE ? g.getStock() : null;
     }
 
     /** 乐观锁扣库存，库存归 0 时商品进入"交易中" */

@@ -153,6 +153,8 @@ export const wants: WantRow[] = [
   { id: '703', userId: '1004', campusId: '2', categoryId: '501', title: '求购一辆二手电动车，能骑就行', description: '两个校区间通勤用，续航 30km 以上。', priceMin: 500, priceMax: 1200, status: 0, expireAt: later(60 * 24 * 13), createdAt: ago(800), deleted: false },
   { id: '704', userId: '1001', campusId: '1', categoryId: '301', title: '收一个宿舍用小冰箱', description: '50L 以内，静音。', priceMin: 100, priceMax: 250, status: 0, expireAt: later(60 * 24 * 4), createdAt: ago(1500), deleted: false },
 ]
+/** 求购响应（「我有」），同一用户对同一求购只记一次 */
+export const wantResponses: { wantId: string; responderId: string }[] = [{ wantId: '704', responderId: '1002' }]
 
 /* ---------------- 聊天 ---------------- */
 export interface ConvRow { id: string; small: string; big: string; goodsId: string | null; lastMessage: string | null; lastMessageAt: string | null; smallUnread: number; bigUnread: number }

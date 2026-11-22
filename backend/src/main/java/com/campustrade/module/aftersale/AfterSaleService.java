@@ -117,9 +117,10 @@ public class AfterSaleService {
             AfterSale a = requireParty(id, buyerId, Operator.BUYER);
             Biz.check(a.getType() == TYPE_REFUND && a.getStatus() == REJECTED && a.getClosedAt() == null,
                     ErrorCode.AFTER_SALE_STATE_INVALID);
-            moveStatus(a, REJECTED, ARBITRATING, null);
+            String note = remark == null || remark.isBlank() ? null : remark.trim();
+            moveStatus(a, REJECTED, ARBITRATING, w -> w.set(AfterSale::getAppealRemark, note));
             orderFlow.transit(orderMapper.selectById(a.getOrderId()), OrderStateMachine.APPEAL, Operator.BUYER,
-                    buyerId, null, remark == null || remark.isBlank() ? null : remark.trim(), null);
+                    buyerId, null, note, null);
         });
     }
 
