@@ -5,11 +5,14 @@ import { shortTime } from '@/shared/format'
 import type { GoodsItem, HomeData } from '@/shared/types'
 import GoodsCard from '../components/GoodsCard.vue'
 import { commonApi, goodsApi } from '../api'
+import { useAuthStore } from '../stores/auth'
 import { useMetaStore } from '../stores/meta'
 
 const meta = useMetaStore()
+const auth = useAuthStore()
 const home = ref<HomeData | null>(null)
 const goods = ref<GoodsItem[]>([])
+const recommended = ref<GoodsItem[]>([])
 const campusId = ref<string>('')
 const page = ref(1)
 const total = ref(0)
@@ -41,6 +44,8 @@ function pickCampus(id: string) {
 onMounted(() => {
   meta.load()
   commonApi.home().then((h) => (home.value = h))
+  // 推荐失败不影响首页其他内容
+  goodsApi.recommend(10).then((r) => (recommended.value = r)).catch(() => {})
   loadGoods(true)
 })
 </script>
@@ -81,6 +86,14 @@ onMounted(() => {
             <AppIcon v-else :name="CAT_ICON[c.name]?.[0] ?? 'grid'" size="lg" />
           </span>{{ c.name }}
         </RouterLink>
+      </section>
+
+      <section v-if="recommended.length" class="stack" style="gap: 12px" aria-labelledby="rec-title">
+        <div class="between">
+          <h2 id="rec-title" class="section-title">{{ auth.loggedIn ? '猜你喜欢' : '大家都在看' }}</h2>
+          <span class="subtle">{{ auth.loggedIn ? '根据你最近浏览和收藏的分类推荐' : '近 30 天浏览最多' }}</span>
+        </div>
+        <div class="goods-grid"><GoodsCard v-for="g in recommended" :key="g.id" :goods="g" /></div>
       </section>
 
       <section class="stack" style="gap: 12px">

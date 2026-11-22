@@ -73,13 +73,25 @@ export interface MeProfile {
   banUntil: DateTime | null
   stats: { onSaleCount: number; soldCount: number; boughtCount: number; favoriteCount: number; goodRate: string | null }
   createdAt: DateTime
+  /** 开启后订单、审核、举报结果、信用分通知同时发邮件 */
+  emailNotify: boolean
 }
-export type MeUpdateBody = Partial<Pick<MeProfile, 'nickname' | 'avatarUrl' | 'college' | 'campusId' | 'bio'>>
+export type MeUpdateBody = Partial<Pick<MeProfile, 'nickname' | 'avatarUrl' | 'college' | 'campusId' | 'bio' | 'emailNotify'>>
 
 export interface CreditLog {
   id: Id; delta: number; scoreAfter: number; reasonType: number; reasonText: string
   refId: Id | null; remark: string | null; createdAt: DateTime
+  /** 30 天内的扣分且未申诉过 */
+  appealable: boolean
+  /** 申诉状态：0 待处理 1 通过 2 驳回；没申诉为 null */
+  appealStatus: number | null
 }
+export interface CreditAppeal {
+  id: Id; creditLogId: Id; delta: number; reasonText: string | null; reason: string; status: number
+  reply: string | null; handledAt: DateTime | null; createdAt: DateTime
+}
+export interface FollowedUser { userId: Id; nickname: string; avatarUrl: string | null; creditLevel: CreditLevel; onSaleCount: number; followedAt: DateTime }
+export interface Captcha { captchaId: string; image: string; expiresIn: number }
 export interface BalanceLog {
   id: Id; amount: string; balanceAfter: Money; type: number; orderId: Id | null; orderNo: string | null; createdAt: DateTime
 }
@@ -90,6 +102,7 @@ export interface UserHome {
   id: Id; nickname: string; avatarUrl: string | null; college: string | null; campusName: string; bio: string | null
   creditScore: number; creditLevel: CreditLevel; badge: boolean; goodRate: string | null; reviewCount: number
   onSaleCount: number; soldCount: number; blocked: boolean; joinedAt: string; status?: number
+  followed: boolean; followerCount: number
 }
 export interface ReviewItem {
   id: Id; role: number; rating: number; content: string | null; tags: string[]; reply: string | null
@@ -209,7 +222,7 @@ export interface SendMessageResult { message: ChatMessage; clientMsgId: string; 
 
 /* ---------- 订单 ---------- */
 export type OrderAction =
-  | 'SELLER_CONFIRM' | 'COMPLETE' | 'CANCEL' | 'PAY' | 'DELIVER' | 'CONFIRM_RECEIPT'
+  | 'SELLER_CONFIRM' | 'COMPLETE' | 'VERIFY_MEET_CODE' | 'CANCEL' | 'PAY' | 'DELIVER' | 'CONFIRM_RECEIPT'
   | 'APPLY_CANCEL' | 'APPLY_REFUND' | 'REVIEW'
 
 export interface OrderItem {
@@ -255,6 +268,8 @@ export interface OrderDetail {
   review: { deadline: DateTime | null; mine: ReviewBrief | null; theirs: ReviewBrief | { submitted: true } | null }
   actions: OrderAction[]
   logs: OrderLog[]
+  /** 面交核销码：仅买家在待面交时可见 */
+  meetCode: string | null
 }
 export interface PayResult { outTradeNo: string; payForm: string; expireAt: DateTime }
 export interface PayStatus { orderStatus: number; paymentStatus: number; paidAt: DateTime | null }

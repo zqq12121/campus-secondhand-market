@@ -8,11 +8,11 @@ import type { OrderAction } from '@/shared/types'
 import { orderApi } from '../api'
 
 export const ACTION_TEXT: Record<OrderAction, string> = {
-  SELLER_CONFIRM: '确认订单', COMPLETE: '确认完成', CANCEL: '取消订单', PAY: '去支付', DELIVER: '已交货',
+  SELLER_CONFIRM: '确认订单', COMPLETE: '确认完成', VERIFY_MEET_CODE: '输入核销码', CANCEL: '取消订单', PAY: '去支付', DELIVER: '已交货',
   CONFIRM_RECEIPT: '确认收货', APPLY_CANCEL: '申请取消退款', APPLY_REFUND: '申请退款', REVIEW: '去评价',
 }
 /** 主按钮（绿色 / 橙色），其他为描边按钮 */
-export const PRIMARY_ACTIONS: OrderAction[] = ['SELLER_CONFIRM', 'COMPLETE', 'DELIVER', 'CONFIRM_RECEIPT', 'REVIEW']
+export const PRIMARY_ACTIONS: OrderAction[] = ['SELLER_CONFIRM', 'COMPLETE', 'VERIFY_MEET_CODE', 'DELIVER', 'CONFIRM_RECEIPT', 'REVIEW']
 
 /** 把支付宝返回的表单写进新窗口并提交，跳转到沙箱收银台（接口文档 8.7） */
 export function openPayForm(html: string) {
@@ -45,6 +45,15 @@ export function useOrderActions(onDone: () => void, openAfterSale?: (type: 1 | 2
         await orderApi.complete(id)
         ElMessage.success('交易完成，记得去评价')
         break
+      case 'VERIFY_MEET_CODE': {
+        const { value } = await ElMessageBox.prompt('请买家打开订单页出示 6 位核销码，输入后交易完成。', '面交核销', {
+          confirmButtonText: '核销', cancelButtonText: '再想想', inputPattern: /^\s*\d{6}\s*$/, inputErrorMessage: '核销码为 6 位数字',
+          inputPlaceholder: '6 位数字',
+        })
+        await orderApi.verifyMeetCode(id, value.trim())
+        ElMessage.success('核销成功，交易完成')
+        break
+      }
       case 'CANCEL': {
         const { value } = await ElMessageBox.prompt('取消原因（必填，最多 200 字）。待面交状态下取消会扣 3 信用分。', '取消订单', {
           confirmButtonText: '取消订单', cancelButtonText: '再想想', inputPattern: /^.{1,200}$/s, inputErrorMessage: '请填写 1–200 字的原因',
