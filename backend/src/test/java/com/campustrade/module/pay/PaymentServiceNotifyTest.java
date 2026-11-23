@@ -2,12 +2,12 @@ package com.campustrade.module.pay;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.campustrade.common.Consts.OrderStatus;
-import com.campustrade.entity.Payment;
-import com.campustrade.entity.TradeOrder;
-import com.campustrade.mapper.PaymentMapper;
-import com.campustrade.mapper.TradeOrderMapper;
 import com.campustrade.module.order.OrderFlow;
 import com.campustrade.module.order.OrderStateMachine;
+import com.campustrade.module.order.entity.TradeOrder;
+import com.campustrade.module.order.mapper.TradeOrderMapper;
+import com.campustrade.module.pay.entity.Payment;
+import com.campustrade.module.pay.mapper.PaymentMapper;
 import com.campustrade.support.MpTestSupport;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;

@@ -2,10 +2,10 @@ package com.campustrade.module.pay;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.campustrade.config.AppProperties;
-import com.campustrade.entity.Payment;
-import com.campustrade.entity.TradeOrder;
-import com.campustrade.mapper.PaymentMapper;
-import com.campustrade.mapper.TradeOrderMapper;
+import com.campustrade.module.order.entity.TradeOrder;
+import com.campustrade.module.order.mapper.TradeOrderMapper;
+import com.campustrade.module.pay.entity.Payment;
+import com.campustrade.module.pay.mapper.PaymentMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpHeaders;

@@ -1,12 +1,12 @@
 package com.campustrade.module.goods;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
-import com.campustrade.entity.Goods;
-import com.campustrade.entity.User;
-import com.campustrade.entity.UserBlock;
-import com.campustrade.mapper.GoodsMapper;
-import com.campustrade.mapper.UserBlockMapper;
+import com.campustrade.module.goods.entity.Goods;
+import com.campustrade.module.goods.mapper.GoodsMapper;
 import com.campustrade.module.user.UserService;
+import com.campustrade.module.user.entity.User;
+import com.campustrade.module.user.entity.UserBlock;
+import com.campustrade.module.user.mapper.UserBlockMapper;
 import com.campustrade.support.MpTestSupport;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;

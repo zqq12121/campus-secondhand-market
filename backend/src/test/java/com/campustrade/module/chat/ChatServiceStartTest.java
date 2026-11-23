@@ -1,19 +1,19 @@
 package com.campustrade.module.chat;
 
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.campustrade.common.BizException;
 import com.campustrade.common.Consts.WantStatus;
 import com.campustrade.common.ErrorCode;
-import com.campustrade.entity.Conversation;
-import com.campustrade.entity.User;
-import com.campustrade.entity.WantPost;
 import com.campustrade.infra.OnlineTracker;
-import com.campustrade.mapper.ConversationMapper;
-import com.campustrade.mapper.WantPostMapper;
-import com.campustrade.mapper.WantResponseMapper;
 import com.campustrade.module.chat.ChatService.StartReq;
+import com.campustrade.module.chat.entity.Conversation;
+import com.campustrade.module.chat.mapper.ConversationMapper;
 import com.campustrade.module.user.UserService;
+import com.campustrade.module.user.entity.User;
+import com.campustrade.module.want.entity.WantPost;
+import com.campustrade.module.want.mapper.WantPostMapper;
+import com.campustrade.module.want.mapper.WantResponseMapper;
 import com.campustrade.support.MpTestSupport;
-import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

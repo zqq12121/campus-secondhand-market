@@ -1,7 +1,7 @@
 package com.campustrade.module.goods.search;
 
-import com.campustrade.entity.Goods;
-import com.campustrade.mapper.GoodsMapper;
+import com.campustrade.module.goods.entity.Goods;
+import com.campustrade.module.goods.mapper.GoodsMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

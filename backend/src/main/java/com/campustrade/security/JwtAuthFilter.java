@@ -1,6 +1,6 @@
 package com.campustrade.security;
 
-import com.campustrade.mapper.AdminUserMapper;
+import com.campustrade.module.admin.system.mapper.AdminUserMapper;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;

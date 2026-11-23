@@ -1,7 +1,7 @@
 package com.campustrade.infra;
 
-import com.campustrade.entity.SensitiveWord;
-import com.campustrade.mapper.SensitiveWordMapper;
+import com.campustrade.module.admin.content.entity.SensitiveWord;
+import com.campustrade.module.admin.content.mapper.SensitiveWordMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

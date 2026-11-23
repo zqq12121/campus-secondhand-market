@@ -1,7 +1,7 @@
 package com.campustrade.module.goods.search;
 
-import com.campustrade.entity.Goods;
-import com.campustrade.mapper.GoodsMapper;
+import com.campustrade.module.goods.entity.Goods;
+import com.campustrade.module.goods.mapper.GoodsMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.StringRedisTemplate;
