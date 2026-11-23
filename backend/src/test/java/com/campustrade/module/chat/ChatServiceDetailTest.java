@@ -1,11 +1,11 @@
 package com.campustrade.module.chat;
 
-import com.campustrade.entity.Conversation;
-import com.campustrade.entity.User;
 import com.campustrade.infra.OnlineTracker;
-import com.campustrade.mapper.ConversationMapper;
 import com.campustrade.module.chat.ChatService.ConversationDetail;
+import com.campustrade.module.chat.entity.Conversation;
+import com.campustrade.module.chat.mapper.ConversationMapper;
 import com.campustrade.module.user.UserService;
+import com.campustrade.module.user.entity.User;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;

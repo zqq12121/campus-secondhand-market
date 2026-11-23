@@ -124,9 +124,13 @@ com.campustrade
 ├── config        配置属性、Jackson、MyBatis-Plus、Security、WebSocket、静态资源
 ├── security      JWT 签发/解析、HTTP 过滤器、STOMP 鉴权、token 失效（Redis）
 ├── infra         限流、邮件、敏感词 DFA、本地文件存储、在线状态、实时推送、mq（延时队列）
-├── entity/mapper 与 sql/schema.sql 一一对应
 └── module        按业务分包：auth、user、common、goods、want、chat、order、pay、aftersale、review、report、notification、admin
+    ├── <模块>/entity、<模块>/mapper   该模块拥有的表（与 sql/schema.sql 对应）
+    ├── <模块>/*Job                    该模块的定时任务
+    └── admin/<业务域>                 后台按 auth、dashboard、goods、user、trade、report、category、content、system 分包
 ```
+
+模块地图、推荐阅读顺序和关键流程的代码路线见 [docs/阅读指南.md](../docs/阅读指南.md)。
 
 ## 实现要点
 

@@ -2,11 +2,11 @@ package com.campustrade.module.goods;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.campustrade.common.Consts.GoodsStatus;
-import com.campustrade.entity.Goods;
-import com.campustrade.entity.UserBlock;
-import com.campustrade.mapper.GoodsMapper;
-import com.campustrade.mapper.UserBlockMapper;
+import com.campustrade.module.goods.entity.Goods;
+import com.campustrade.module.goods.mapper.GoodsMapper;
 import com.campustrade.module.user.UserService;
+import com.campustrade.module.user.entity.UserBlock;
+import com.campustrade.module.user.mapper.UserBlockMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;

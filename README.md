@@ -35,6 +35,7 @@
 | [backend](backend/README.md) | Spring Boot 3.5 + MyBatis-Plus + Spring Security（JWT）+ Redis + RabbitMQ + WebSocket |
 | [frontend](frontend/README.md) | Vue 3 + TypeScript + Vite + Element Plus + Pinia；用户端和后台两个入口，自带 Mock 后端 |
 | [ai-service](ai-service/README.md) | Python 3.11 + FastAPI + LangGraph，DeepSeek 模型，本地 bge-small-zh 向量 |
+| [docs/阅读指南.md](docs/阅读指南.md) | 从零读懂项目：包结构约定、模块地图、推荐阅读顺序、关键流程的代码路线、中间件用途 |
 | [docs/接口文档.md](docs/接口文档.md) | 前后端接口约定，含状态机、错误码和设计假设 |
 | docker/elasticsearch | 带 smartcn 中文分词插件的 ES 镜像（`docker compose --profile es`） |
 | [sql](sql) | `schema.sql` 表结构、`init_data.sql` 初始数据、`demo_goods.sql` 演示商品、`upgrade/` 已有库升级脚本 |

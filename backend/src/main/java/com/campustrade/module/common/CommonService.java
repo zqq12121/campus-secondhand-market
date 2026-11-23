@@ -1,10 +1,10 @@
 package com.campustrade.module.common;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.campustrade.entity.Campus;
-import com.campustrade.entity.Category;
-import com.campustrade.mapper.CampusMapper;
-import com.campustrade.mapper.CategoryMapper;
+import com.campustrade.module.common.entity.Campus;
+import com.campustrade.module.common.entity.Category;
+import com.campustrade.module.common.mapper.CampusMapper;
+import com.campustrade.module.common.mapper.CategoryMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

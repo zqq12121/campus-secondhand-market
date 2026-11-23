@@ -1,7 +1,7 @@
 package com.campustrade.module.admin;
 
-import com.campustrade.entity.OperationLog;
-import com.campustrade.mapper.OperationLogMapper;
+import com.campustrade.module.admin.system.entity.OperationLog;
+import com.campustrade.module.admin.system.mapper.OperationLogMapper;
 import com.campustrade.security.CurrentUser;
 import com.campustrade.security.LoginUser;
 import com.fasterxml.jackson.databind.ObjectMapper;
