@@ -17,6 +17,7 @@ import com.campustrade.entity.Goods;
 import com.campustrade.entity.OrderLog;
 import com.campustrade.entity.TradeOrder;
 import com.campustrade.entity.User;
+import com.campustrade.infra.StockCache;
 import com.campustrade.infra.mq.DelayPublisher;
 import com.campustrade.infra.mq.DelayType;
 import com.campustrade.mapper.GoodsMapper;
@@ -71,6 +72,7 @@ public class OrderService {
     private final AfterSaleService afterSaleService;
     private final ChatService chatService;
     private final DelayPublisher delayPublisher;
+    private final StockCache stockCache;
     private final StringRedisTemplate redis;
     private final AppProperties props;
 
@@ -132,8 +134,9 @@ public class OrderService {
         return o;
     }
 
-    /** 乐观锁扣库存，库存归 0 时商品进入"交易中" */
+    /** Redis 预扣 + 乐观锁扣库存，库存归 0 时商品进入"交易中" */
     private Goods deductStock(long buyerId, CreateReq req) {
+        boolean reserved = false;
         for (int i = 0; i < STOCK_RETRY; i++) {
             Goods g = Biz.notNull(goodsMapper.selectById(req.goodsId()), ErrorCode.GOODS_NOT_FOUND);
             Biz.check(!g.getSellerId().equals(buyerId), ErrorCode.BUY_SELF);
@@ -142,6 +145,10 @@ public class OrderService {
                     ErrorCode.TRADE_MODE_UNSUPPORTED);
             Biz.check(!userService.isBlocked(g.getSellerId(), buyerId), ErrorCode.BLOCKED_BY_SELLER);
             Biz.check(g.getStock() >= req.quantity(), ErrorCode.STOCK_NOT_ENOUGH);
+            if (!reserved) {
+                stockCache.reserve(g.getId(), req.quantity(), g.getStock());
+                reserved = true;
+            }
             int left = g.getStock() - req.quantity();
             Goods upd = new Goods();
             upd.setId(g.getId());

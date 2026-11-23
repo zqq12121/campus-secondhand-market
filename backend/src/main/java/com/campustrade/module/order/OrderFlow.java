@@ -20,6 +20,7 @@ import com.campustrade.entity.OrderLog;
 import com.campustrade.entity.Payment;
 import com.campustrade.entity.TradeOrder;
 import com.campustrade.entity.User;
+import com.campustrade.infra.StockCache;
 import com.campustrade.infra.mq.DelayPublisher;
 import com.campustrade.infra.mq.DelayType;
 import com.campustrade.mapper.AfterSaleMapper;
@@ -89,6 +90,7 @@ public class OrderFlow {
     private final ChatService chatService;
     private final PaymentGateway paymentGateway;
     private final DelayPublisher delayPublisher;
+    private final StockCache stockCache;
     private final AppProperties props;
 
     // ------------------------------------------------------------------ 创建
@@ -229,6 +231,7 @@ public class OrderFlow {
                 .setSql("stock = stock + " + o.getQuantity() + ", version = version + 1"));
         goodsMapper.update(new LambdaUpdateWrapper<Goods>().eq(Goods::getId, o.getGoodsId())
                 .eq(Goods::getStatus, GoodsStatus.TRADING).set(Goods::getStatus, GoodsStatus.ON_SALE));
+        stockCache.evictAfterCommit(o.getGoodsId());
     }
 
     private void closePayment(long orderId) {
