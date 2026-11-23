@@ -7,6 +7,7 @@ import com.campustrade.module.order.OrderDtos.CreateReq;
 import com.campustrade.module.order.OrderDtos.CreateResp;
 import com.campustrade.module.order.OrderDtos.DetailVO;
 import com.campustrade.module.order.OrderDtos.OrderPage;
+import com.campustrade.module.order.OrderDtos.VerifyMeetCodeReq;
 import com.campustrade.module.pay.PaymentService;
 import com.campustrade.module.pay.PaymentService.PayResult;
 import com.campustrade.module.pay.PaymentService.PayStatus;
@@ -50,6 +51,12 @@ public class OrderController {
     @PostMapping("/{id}/seller-confirm")
     public R<Void> sellerConfirm(@PathVariable long id) {
         orderService.sellerConfirm(CurrentUser.id(), id);
+        return R.ok();
+    }
+
+    @PostMapping("/{id}/verify-meet-code")
+    public R<Void> verifyMeetCode(@PathVariable long id, @Valid @RequestBody VerifyMeetCodeReq req) {
+        orderService.verifyMeetCode(CurrentUser.id(), id, req.code());
         return R.ok();
     }
 

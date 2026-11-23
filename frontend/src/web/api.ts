@@ -1,7 +1,7 @@
 /** 用户端接口，按 docs/接口文档.md 第 2–12 章组织，前缀 /api/v1 */
 import { http } from './http'
 import type {
-  AfterSale, AnnouncementDetail, AnnouncementItem, BalanceLog, BlockedUser, Campus, Category, ChatMessage,
+  AfterSale, AnnouncementDetail, Captcha, CreditAppeal, FollowedUser, AnnouncementItem, BalanceLog, BlockedUser, Campus, Category, ChatMessage,
   ConversationDetail, ConversationItem, CreditLog, FavoriteItem, GoodsDetail, GoodsForm, GoodsItem, GoodsQuery,
   GoodsSaveResult, HomeData, Id, LoginResult, MeProfile, MeUpdateBody, MyGoodsItem, NotificationItem,
   OrderCreateBody, OrderCreateResult, OrderDetail, OrderItem, PageQuery, PageResult, PageWithCounts, PayResult,
@@ -28,9 +28,13 @@ export const commonApi = {
 
 /* 3. 账号 */
 export const authApi = {
-  sendCode: (email: string, scene: 'REGISTER' | 'RESET_PASSWORD') => http.post<null>('/auth/email-codes', { email, scene }),
+  captcha: () => http.get<Captcha>('/auth/captcha', undefined, { silent: true }),
+  sendCode: (email: string, scene: 'REGISTER' | 'RESET_PASSWORD', captchaId: string, captchaCode: string) =>
+    http.post<null>('/auth/email-codes', { email, scene, captchaId, captchaCode }),
   register: (body: RegisterBody) => http.post<LoginResult>('/auth/register', body),
-  login: (email: string, password: string) => http.post<LoginResult>('/auth/login', { email, password }, { silent: true }),
+  /** 连续失败 3 次后需要带图形验证码 */
+  login: (email: string, password: string, captchaId?: string, captchaCode?: string) =>
+    http.post<LoginResult>('/auth/login', { email, password, captchaId, captchaCode }, { silent: true }),
   logout: () => http.post<null>('/auth/logout', undefined, { silent: true }),
   resetPassword: (email: string, code: string, newPassword: string) =>
     http.post<null>('/auth/password/reset', { email, code, newPassword }),
@@ -43,6 +47,11 @@ export const userApi = {
   changePassword: (oldPassword: string, newPassword: string) =>
     http.put<{ token: string; expiresIn: number }>('/users/me/password', { oldPassword, newPassword }),
   creditLogs: (q: PageQuery) => http.get<PageResult<CreditLog>>('/users/me/credit-logs', q),
+  appealCredit: (logId: Id, reason: string) => http.post<CreditAppeal>(`/users/me/credit-logs/${logId}/appeal`, { reason }),
+  creditAppeals: (q: PageQuery) => http.get<PageResult<CreditAppeal>>('/users/me/credit-appeals', q),
+  follows: (q: PageQuery) => http.get<PageResult<FollowedUser>>('/users/me/follows', q),
+  follow: (id: Id) => http.post<null>(`/users/${id}/follow`),
+  unfollow: (id: Id) => http.del<null>(`/users/${id}/follow`),
   balanceLogs: (q: PageQuery) => http.get<PageResult<BalanceLog>>('/users/me/balance-logs', q),
   myGoods: (q: PageQuery & { status?: number }) => http.get<PageWithCounts<MyGoodsItem>>('/users/me/goods', q),
   favorites: (q: PageQuery) => http.get<PageResult<FavoriteItem>>('/users/me/favorites', q),
@@ -59,6 +68,7 @@ export const userApi = {
 export const goodsApi = {
   list: (q: GoodsQuery) => http.get<PageResult<GoodsItem>>('/goods', q),
   hotWords: () => http.get<string[]>('/search/hot-words'),
+  recommend: (size = 10) => http.get<GoodsItem[]>('/goods/recommend', { size }, { silent: true }),
   detail: (id: Id) => http.get<GoodsDetail>(`/goods/${id}`),
   create: (body: GoodsForm) => http.post<GoodsSaveResult>('/goods', body),
   update: (id: Id, body: GoodsForm) => http.put<GoodsSaveResult>(`/goods/${id}`, body),
@@ -97,6 +107,7 @@ export const orderApi = {
   detail: (id: Id) => http.get<OrderDetail>(`/orders/${id}`),
   sellerConfirm: (id: Id) => http.post<null>(`/orders/${id}/seller-confirm`),
   complete: (id: Id) => http.post<null>(`/orders/${id}/complete`),
+  verifyMeetCode: (id: Id, code: string) => http.post<null>(`/orders/${id}/verify-meet-code`, { code }),
   cancel: (id: Id, reason: string) => http.post<null>(`/orders/${id}/cancel`, { reason }),
   pay: (id: Id) => http.post<PayResult>(`/orders/${id}/pay`),
   payStatus: (id: Id) => http.get<PayStatus>(`/orders/${id}/pay-status`, undefined, { silent: true }),

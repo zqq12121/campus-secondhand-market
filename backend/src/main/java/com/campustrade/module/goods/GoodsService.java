@@ -19,11 +19,13 @@ import com.campustrade.entity.Favorite;
 import com.campustrade.entity.Goods;
 import com.campustrade.entity.GoodsImage;
 import com.campustrade.entity.User;
+import com.campustrade.entity.UserBlock;
 import com.campustrade.infra.FileStorageService;
 import com.campustrade.infra.StockCache;
 import com.campustrade.mapper.FavoriteMapper;
 import com.campustrade.mapper.GoodsImageMapper;
 import com.campustrade.mapper.GoodsMapper;
+import com.campustrade.mapper.UserBlockMapper;
 import com.campustrade.module.common.CommonService;
 import com.campustrade.module.goods.GoodsDtos.DetailVO;
 import com.campustrade.module.goods.GoodsDtos.FavoriteCard;
@@ -36,8 +38,11 @@ import com.campustrade.module.goods.GoodsDtos.SaveResp;
 import com.campustrade.module.goods.GoodsDtos.SearchQuery;
 import com.campustrade.module.goods.GoodsDtos.SellerBrief;
 import com.campustrade.module.goods.GoodsDtos.SellerCard;
+import com.campustrade.module.goods.search.GoodsSearchIndex;
 import com.campustrade.module.user.UserService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -54,6 +59,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class GoodsService {
@@ -73,6 +79,11 @@ public class GoodsService {
     private final FileStorageService fileStorageService;
     private final StringRedisTemplate redis;
     private final StockCache stockCache;
+    private final UserBlockMapper blockMapper;
+    private final PriceDropService priceDropService;
+    private final RecommendService recommendService;
+    /** SEARCH_ENGINE=es 时才有 */
+    private final ObjectProvider<GoodsSearchIndex> searchIndex;
     private final AppProperties props;
 
     // ------------------------------------------------------------------ 浏览
@@ -82,8 +93,12 @@ public class GoodsService {
         String kw = q.getKeyword() == null ? null : q.getKeyword().trim();
         boolean hasKw = kw != null && !kw.isEmpty();
         if (hasKw) {
-            w.apply("MATCH(title, description) AGAINST({0})", kw);
             hotWordService.record(kw);
+            PageResult<GoodsCard> es = searchByIndex(q, kw, viewerId);
+            if (es != null) {
+                return es;
+            }
+            w.apply("MATCH(title, description) AGAINST({0})", kw);
         }
         if (q.getCategoryId() != null) {
             w.in("category_id", commonService.expandCategory(q.getCategoryId()));
@@ -117,6 +132,36 @@ public class GoodsService {
         return PageResult.of(page, cards(page.getRecords()));
     }
 
+    /** ES 检索；未启用或出错返回 null，由调用方走 MySQL 全文索引 */
+    private PageResult<GoodsCard> searchByIndex(SearchQuery q, String kw, Long viewerId) {
+        GoodsSearchIndex index = searchIndex.getIfAvailable();
+        if (index == null) {
+            return null;
+        }
+        try {
+            List<Long> blockedBy = viewerId == null ? List.of() : blockMapper.selectList(
+                            new LambdaQueryWrapper<UserBlock>().eq(UserBlock::getBlockedUserId, viewerId))
+                    .stream().map(UserBlock::getUserId).toList();
+            GoodsSearchIndex.Hits hits = index.search(q, kw,
+                    q.getCategoryId() == null ? null : commonService.expandCategory(q.getCategoryId()), blockedBy);
+            Map<Long, Goods> byId = hits.ids().isEmpty() ? Map.of() : goodsMapper.selectByIds(hits.ids()).stream()
+                    .collect(Collectors.toMap(Goods::getId, Function.identity()));
+            // 按 ES 排序；索引滞后时已下架的商品直接跳过
+            List<Goods> ordered = hits.ids().stream().map(byId::get)
+                    .filter(g -> g != null && g.getStatus() == GoodsStatus.ON_SALE).toList();
+            Page<Goods> page = q.toPage();
+            return new PageResult<>(cards(ordered), hits.total(), (int) page.getCurrent(), (int) page.getSize());
+        } catch (Exception e) {
+            log.warn("ES 检索失败，退回 MySQL：{}", e.getMessage());
+            return null;
+        }
+    }
+
+    /** 猜你喜欢（P2） */
+    public List<GoodsCard> recommend(Long viewerId, Integer size) {
+        return cards(recommendService.recommend(viewerId, size == null ? 10 : size));
+    }
+
     public PageResult<GoodsCard> onSaleOf(long sellerId, PageQuery pq) {
         Page<Goods> page = goodsMapper.selectPage(pq.toPage(), new LambdaQueryWrapper<Goods>()
                 .eq(Goods::getSellerId, sellerId).eq(Goods::getStatus, GoodsStatus.ON_SALE)
@@ -133,6 +178,9 @@ public class GoodsService {
         boolean mine = g != null && viewerId != null && g.getSellerId().equals(viewerId);
         Biz.check(g != null && (mine || PUBLIC_STATUS.contains(g.getStatus())), ErrorCode.GOODS_NOT_FOUND);
         countView(g, viewerId == null ? "ip:" + clientIp : "u:" + viewerId);
+        if (viewerId != null && !mine) {
+            recommendService.onViewed(viewerId, g);
+        }
 
         User seller = userService.require(g.getSellerId());
         int score = seller.getCreditScore();
@@ -214,6 +262,7 @@ public class GoodsService {
                 || !Objects.equals(g.getDescription(), req.description().trim())
                 || !Objects.equals(g.getCategoryId(), req.categoryId())
                 || !oldImages.equals(req.images());
+        BigDecimal oldPrice = g.getPrice();
         fill(g, req, seller);
         goodsMapper.updateById(g);
         TxUtil.afterCommit(() -> stockCache.evict(id));
@@ -223,6 +272,9 @@ public class GoodsService {
         }
         boolean keepDraft = Boolean.TRUE.equals(req.draft()) && st == GoodsStatus.DRAFT;
         if (keepDraft || (st == GoodsStatus.ON_SALE && !contentChanged)) {
+            if (st == GoodsStatus.ON_SALE) {
+                priceDropService.onPriceChanged(g, oldPrice);
+            }
             return new SaveResp(id, st, List.of());
         }
         if (st == GoodsStatus.DRAFT || st == GoodsStatus.REJECTED || st == GoodsStatus.OFF_SHELF) {
@@ -288,6 +340,7 @@ public class GoodsService {
             favoriteMapper.insert(f);
             goodsMapper.update(new LambdaUpdateWrapper<Goods>().eq(Goods::getId, goodsId)
                     .setSql("favorite_count = favorite_count + 1"));
+            recommendService.onFavorited(userId, g);
         } catch (DuplicateKeyException ignored) {
             // 已收藏，幂等
         }

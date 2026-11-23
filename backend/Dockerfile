@@ -7,6 +7,9 @@ COPY src ./src
 RUN mvn -q -B package -DskipTests
 
 FROM eclipse-temurin:21-jre
+# 图形验证码用 AWT 绘制文字，需要字体
+RUN apt-get update && apt-get install -y --no-install-recommends fontconfig fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV TZ=Asia/Shanghai UPLOAD_DIR=/app/uploads
 COPY --from=build /src/target/*.jar app.jar

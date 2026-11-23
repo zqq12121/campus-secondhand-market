@@ -46,7 +46,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, U + "/auth/email-codes", U + "/auth/register",
                                 U + "/auth/login", U + "/auth/password/reset", "/api/admin/v1/auth/login").permitAll()
                         .requestMatchers(U + "/users/me", U + "/users/me/**").authenticated()
-                        .requestMatchers(HttpMethod.GET, U + "/common/**", U + "/home", U + "/announcements/**",
+                        .requestMatchers(HttpMethod.GET, U + "/auth/captcha", U + "/common/**", U + "/home", U + "/announcements/**",
                                 U + "/search/hot-words", U + "/goods", U + "/goods/*", U + "/users/*",
                                 U + "/users/*/goods", U + "/users/*/reviews", U + "/wants", U + "/wants/*",
                                 U + "/review-tags").permitAll()

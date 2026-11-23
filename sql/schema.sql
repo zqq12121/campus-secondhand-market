@@ -51,6 +51,7 @@ CREATE TABLE `user` (
   status        TINYINT      NOT NULL DEFAULT 0 COMMENT '0正常 1禁言 2封禁',
   ban_until     DATETIME     DEFAULT NULL COMMENT '禁言/封禁截止时间，NULL 表示永久或未处罚',
   last_login_at DATETIME     DEFAULT NULL,
+  email_notify  TINYINT      NOT NULL DEFAULT 0 COMMENT '1 开启邮件通知：订单、审核、举报结果、信用分通知同时发邮件',
   deleted       TINYINT      NOT NULL DEFAULT 0,
   created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -69,12 +70,22 @@ CREATE TABLE user_block (
   UNIQUE KEY uk_pair (user_id, blocked_user_id)
 ) COMMENT '拉黑关系：被拉黑方不能给发起人发消息和下单';
 
+CREATE TABLE user_follow (
+  id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id     BIGINT UNSIGNED NOT NULL COMMENT '关注发起人',
+  followee_id BIGINT UNSIGNED NOT NULL COMMENT '被关注的卖家',
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_pair (user_id, followee_id),
+  KEY idx_followee (followee_id)
+) COMMENT '关注卖家：卖家有商品上架时通知粉丝';
+
 CREATE TABLE credit_log (
   id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   user_id     BIGINT UNSIGNED NOT NULL,
   delta       INT          NOT NULL COMMENT '变动分值，正加负减',
   score_after INT          NOT NULL COMMENT '变动后信用分',
-  reason_type TINYINT      NOT NULL COMMENT '1完成交易 2收到好评 3收到差评 4违约取消/爽约 5纠纷败诉 6举报成立 7管理员调整',
+  reason_type TINYINT      NOT NULL COMMENT '1完成交易 2收到好评 3收到差评 4违约取消/爽约 5纠纷败诉 6举报成立 7管理员调整 8申诉通过',
   ref_id      BIGINT UNSIGNED DEFAULT NULL COMMENT '关联业务ID（订单/举报等）',
   remark      VARCHAR(200) DEFAULT NULL,
   operator_id BIGINT UNSIGNED DEFAULT NULL COMMENT '管理员调整时的管理员ID',
@@ -82,6 +93,23 @@ CREATE TABLE credit_log (
   PRIMARY KEY (id),
   KEY idx_user_time (user_id, created_at)
 ) COMMENT '信用分变动流水';
+
+CREATE TABLE credit_appeal (
+  id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id       BIGINT UNSIGNED NOT NULL,
+  credit_log_id BIGINT UNSIGNED NOT NULL COMMENT '被申诉的扣分流水，每条只能申诉一次',
+  delta         INT          NOT NULL COMMENT '被扣分值（负数），通过时按其绝对值加回',
+  reason        VARCHAR(500) NOT NULL,
+  status        TINYINT      NOT NULL DEFAULT 0 COMMENT '0待处理 1通过 2驳回',
+  handler_id    BIGINT UNSIGNED DEFAULT NULL COMMENT '处理的管理员',
+  reply         VARCHAR(200) DEFAULT NULL COMMENT '处理说明',
+  handled_at    DATETIME     DEFAULT NULL,
+  created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_credit_log (credit_log_id),
+  KEY idx_status (status, id),
+  KEY idx_user (user_id, id)
+) COMMENT '信用分申诉';
 
 CREATE TABLE balance_log (
   id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -245,6 +273,7 @@ CREATE TABLE trade_order (
   cancel_reason   VARCHAR(200) DEFAULT NULL,
   cancel_by       TINYINT      DEFAULT NULL COMMENT '1买家 2卖家 3系统超时 4管理员',
   seller_confirmed_at DATETIME DEFAULT NULL COMMENT '面交：卖家确认时间',
+  meet_code   CHAR(6)      DEFAULT NULL COMMENT '面交核销码：卖家确认时生成，仅买家可见，卖家输入后完成交易',
   paid_at         DATETIME     DEFAULT NULL COMMENT '担保：支付时间',
   delivered_at    DATETIME     DEFAULT NULL COMMENT '担保：卖家交货时间',
   finished_at     DATETIME     DEFAULT NULL,
@@ -375,7 +404,7 @@ CREATE TABLE audit_record (
 CREATE TABLE notification (
   id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   user_id    BIGINT UNSIGNED NOT NULL,
-  type       TINYINT      NOT NULL COMMENT '1订单 2审核 3求购匹配 4举报结果 5信用分 6系统公告',
+  type       TINYINT      NOT NULL COMMENT '1订单 2审核 3求购匹配 4举报结果 5信用分 6系统公告 7关注上新 8降价提醒',
   title      VARCHAR(64)  NOT NULL,
   content    VARCHAR(500) NOT NULL,
   ref_type   TINYINT      DEFAULT NULL COMMENT '跳转目标：1订单 2商品 3求购帖',

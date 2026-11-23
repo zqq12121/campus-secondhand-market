@@ -22,6 +22,7 @@ import com.campustrade.module.goods.GoodsAuditService;
 import com.campustrade.module.goods.GoodsService;
 import com.campustrade.module.notification.NotificationService;
 import com.campustrade.module.order.OrderFlow;
+import com.campustrade.module.user.FollowService;
 import com.campustrade.module.user.UserService;
 import com.campustrade.module.want.WantMatchService;
 import lombok.Data;
@@ -54,6 +55,7 @@ public class AdminGoodsService {
     private final CommonService commonService;
     private final NotificationService notificationService;
     private final WantMatchService wantMatchService;
+    private final FollowService followService;
 
     @Data
     @EqualsAndHashCode(callSuper = true)
@@ -114,6 +116,7 @@ public class AdminGoodsService {
         notificationService.send(g.getSellerId(), NotifyType.AUDIT, "商品审核通过",
                 "「" + g.getTitle() + "」已通过审核并上架", RefType.GOODS, goodsId);
         wantMatchService.onGoodsOnSale(g);
+        followService.onGoodsOnSale(g);
     }
 
     @Transactional

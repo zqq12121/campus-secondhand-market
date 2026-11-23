@@ -31,6 +31,9 @@ __pycache__/
 .env
 .env.*
 !.env.example
+# 前端 Vite 模式开关（只有 Mock 开关和本地地址，不含密钥），缺了 npm run dev 无法使用 Mock
+!frontend/.env.development
+!frontend/.env.real
 *.pem
 *.key
 application-local.yml

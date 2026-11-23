@@ -21,6 +21,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'users', name: 'users', component: () => import('./views/UsersView.vue'), meta: { title: '用户管理', perm: 'user:view' } },
       { path: 'orders', name: 'orders', component: () => import('./views/OrdersView.vue'), meta: { title: '订单查询', perm: 'order:view' } },
       { path: 'disputes', name: 'disputes', component: () => import('./views/DisputesView.vue'), meta: { title: '纠纷裁决', perm: 'dispute:handle' } },
+      { path: 'credit-appeals', name: 'credit-appeals', component: () => import('./views/CreditAppealsView.vue'), meta: { title: '信用分申诉', perm: 'user:credit-appeal' } },
       { path: 'reports', name: 'reports', component: () => import('./views/ReportsView.vue'), meta: { title: '举报处理', perm: 'report:handle' } },
       { path: 'content', name: 'content', component: () => import('./views/ContentView.vue'), meta: { title: '内容运营' } },
       { path: 'system', name: 'system', component: () => import('./views/SystemView.vue'), meta: { title: '权限与日志' } },

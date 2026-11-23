@@ -51,6 +51,9 @@ public class TradeOrder {
     /** 面交：卖家确认时间 */
     private LocalDateTime sellerConfirmedAt;
 
+    /** 面交核销码：卖家确认时生成，仅买家可见，卖家输入后完成交易 */
+    private String meetCode;
+
     /** 担保：支付时间 */
     private LocalDateTime paidAt;
 

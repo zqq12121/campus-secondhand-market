@@ -29,6 +29,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserController {
 
     private final UserService userService;
+    private final FollowService followService;
+    private final CreditAppealService creditAppealService;
 
     @GetMapping("/me")
     public R<MeVO> me() {
@@ -50,6 +52,17 @@ public class UserController {
         return R.ok(userService.creditLogs(CurrentUser.id(), pq));
     }
 
+    @PostMapping("/me/credit-logs/{id}/appeal")
+    public R<CreditAppealService.AppealVO> appeal(@PathVariable long id,
+                                                  @Valid @RequestBody CreditAppealService.ApplyReq req) {
+        return R.ok(creditAppealService.apply(CurrentUser.id(), id, req));
+    }
+
+    @GetMapping("/me/credit-appeals")
+    public R<PageResult<CreditAppealService.AppealVO>> appeals(PageQuery pq) {
+        return R.ok(creditAppealService.mine(CurrentUser.id(), pq));
+    }
+
     @GetMapping("/me/balance-logs")
     public R<PageResult<BalanceLogVO>> balanceLogs(PageQuery pq) {
         return R.ok(userService.balanceLogs(CurrentUser.id(), pq));
@@ -69,6 +82,23 @@ public class UserController {
     @DeleteMapping("/{id}/block")
     public R<Void> unblock(@PathVariable long id) {
         userService.unblock(CurrentUser.id(), id);
+        return R.ok();
+    }
+
+    @GetMapping("/me/follows")
+    public R<PageResult<FollowService.FollowVO>> follows(PageQuery pq) {
+        return R.ok(followService.mine(CurrentUser.id(), pq));
+    }
+
+    @PostMapping("/{id}/follow")
+    public R<Void> follow(@PathVariable long id) {
+        followService.follow(CurrentUser.id(), id);
+        return R.ok();
+    }
+
+    @DeleteMapping("/{id}/follow")
+    public R<Void> unfollow(@PathVariable long id) {
+        followService.unfollow(CurrentUser.id(), id);
         return R.ok();
     }
 

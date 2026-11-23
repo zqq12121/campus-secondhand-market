@@ -69,3 +69,9 @@ export interface AdminAccount { id: Id; username: string; realName: string; stat
 export interface Role { id: Id; code: string; name: string; builtIn: boolean; adminCount: number }
 export interface Permission { id: Id; code: string; name: string; children?: Permission[] }
 export interface OperationLog { id: Id; adminName: string; module: string; action: string; targetId: Id | null; detail: string | null; ip: string; createdAt: DateTime }
+
+export interface CreditAppealItem {
+  id: Id; userId: Id; nickname: string | null; creditScore: number | null; creditLogId: Id; delta: number
+  reasonText: string | null; logRemark: string | null; logCreatedAt: DateTime | null; reason: string; status: number
+  reply: string | null; handlerId: Id | null; handledAt: DateTime | null; createdAt: DateTime
+}

@@ -38,11 +38,12 @@ public final class Consts {
 
     public static final class CreditReason {
         public static final int TRADE_DONE = 1, GOOD_REVIEW = 2, BAD_REVIEW = 3, DEFAULT_CANCEL = 4,
-                DISPUTE_LOST = 5, REPORT_ESTABLISHED = 6, ADMIN_ADJUST = 7;
+                DISPUTE_LOST = 5, REPORT_ESTABLISHED = 6, ADMIN_ADJUST = 7, APPEAL_PASSED = 8;
     }
 
     public static final class NotifyType {
-        public static final int ORDER = 1, AUDIT = 2, WANT_MATCH = 3, REPORT = 4, CREDIT = 5, SYSTEM = 6;
+        public static final int ORDER = 1, AUDIT = 2, WANT_MATCH = 3, REPORT = 4, CREDIT = 5, SYSTEM = 6,
+                FOLLOW = 7, PRICE_DROP = 8;
     }
 
     public static final class RefType {

@@ -43,4 +43,13 @@ class OrderStateMachineTest {
         assertThat(next(OrderStatus.AFTER_SALE, ARBITRATE_REFUND, Operator.ADMIN, null)).isEqualTo(OrderStatus.REFUNDED);
         assertThat(next(OrderStatus.AFTER_SALE, ARBITRATE_REFUND, Operator.SELLER, null)).isNull();
     }
+
+    @Test
+    void sellerVerifiesMeetCode() {
+        assertThat(next(OrderStatus.WAIT_MEET, VERIFY_MEET_CODE, Operator.SELLER, null)).isEqualTo(OrderStatus.FINISHED);
+        assertThat(next(OrderStatus.WAIT_MEET, VERIFY_MEET_CODE, Operator.BUYER, null)).isNull();
+        assertThat(next(OrderStatus.WAIT_SELLER_CONFIRM, VERIFY_MEET_CODE, Operator.SELLER, null)).isNull();
+        assertThat(userActions(OrderStatus.WAIT_MEET, Operator.SELLER)).contains(VERIFY_MEET_CODE);
+        assertThat(userActions(OrderStatus.WAIT_MEET, Operator.BUYER)).doesNotContain(VERIFY_MEET_CODE);
+    }
 }

@@ -2,7 +2,7 @@
 import { createHttp } from '@/shared/request'
 import type { Id, PageQuery, PageResult } from '@/shared/types'
 import type {
-  AdminAccount, AdminCategory, AdminGoods, AdminLoginResult, AdminMe, AdminOrder, AdminOrderDetail, AdminUser, Announcement,
+  AdminAccount, AdminCategory, CreditAppealItem, AdminGoods, AdminLoginResult, AdminMe, AdminOrder, AdminOrderDetail, AdminUser, Announcement,
   AuditGoods, AuditRecord, CategoryShare, DisputeDetail, DisputeItem, OperationLog, Overview, Permission, ReportHandleBody,
   ReportItem, Role, SensitiveWord, Trend,
 } from './types'
@@ -106,4 +106,10 @@ export const systemApi = {
   rolePermissions: (id: Id) => http.get<Id[]>(`/roles/${id}/permissions`),
   setRolePermissions: (id: Id, permissionIds: Id[]) => http.put<null>(`/roles/${id}/permissions`, { permissionIds }),
   logs: (q: Q) => http.get<PageResult<OperationLog>>('/operation-logs', q),
+}
+
+/* 信用分申诉（P2） */
+export const creditAppealApi = {
+  list: (q: Q) => http.get<PageResult<CreditAppealItem>>('/credit-appeals', q),
+  handle: (id: Id, approve: boolean, reply: string) => http.post<null>(`/credit-appeals/${id}/handle`, { approve, reply }),
 }

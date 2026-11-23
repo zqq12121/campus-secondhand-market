@@ -9,6 +9,7 @@ import com.campustrade.entity.User;
 import com.campustrade.infra.SensitiveWordService;
 import com.campustrade.mapper.AuditRecordMapper;
 import com.campustrade.mapper.GoodsMapper;
+import com.campustrade.module.user.FollowService;
 import com.campustrade.module.want.WantMatchService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -29,6 +30,7 @@ public class GoodsAuditService {
     private final AuditRecordMapper auditRecordMapper;
     private final GoodsMapper goodsMapper;
     private final WantMatchService wantMatchService;
+    private final FollowService followService;
 
     /** 写入状态（待审核 / 在售）并返回命中的敏感词 */
     public List<String> submit(Goods goods, User seller) {
@@ -44,6 +46,7 @@ public class GoodsAuditService {
         goods.setStatus(pass ? GoodsStatus.ON_SALE : GoodsStatus.PENDING);
         if (pass) {
             wantMatchService.onGoodsOnSale(goods);
+            followService.onGoodsOnSale(goods);
         }
         String reason = pass ? "自动审核通过" : (hits.isEmpty() ? "信用分低于 80，转人工审核" : "命中敏感词，转人工审核");
         record(goods.getId(), AUDITOR_SYSTEM, null, pass ? AuditResult.PASS : AuditResult.MANUAL, reason,
