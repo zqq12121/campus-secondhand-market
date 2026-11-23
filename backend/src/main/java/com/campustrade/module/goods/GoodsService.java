@@ -19,6 +19,7 @@ import com.campustrade.entity.Goods;
 import com.campustrade.entity.GoodsImage;
 import com.campustrade.entity.User;
 import com.campustrade.infra.FileStorageService;
+import com.campustrade.infra.StockCache;
 import com.campustrade.mapper.FavoriteMapper;
 import com.campustrade.mapper.GoodsImageMapper;
 import com.campustrade.mapper.GoodsMapper;
@@ -69,6 +70,7 @@ public class GoodsService {
     private final GoodsAuditService auditService;
     private final HotWordService hotWordService;
     private final FileStorageService fileStorageService;
+    private final StockCache stockCache;
     private final StringRedisTemplate redis;
     private final AppProperties props;
 
@@ -213,6 +215,7 @@ public class GoodsService {
                 || !oldImages.equals(req.images());
         fill(g, req, seller);
         goodsMapper.updateById(g);
+        stockCache.evictAfterCommit(id);
         if (!oldImages.equals(req.images())) {
             imageMapper.delete(new LambdaQueryWrapper<GoodsImage>().eq(GoodsImage::getGoodsId, id));
             saveImages(id, req.images());
