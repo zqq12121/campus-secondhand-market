@@ -25,6 +25,10 @@ public enum ErrorCode {
     ACCOUNT_BANNED(1009, "账号已封禁"),
     ACCOUNT_MUTED(1010, "账号已禁言"),
     CREDIT_RESTRICTED(1011, "信用分不足，功能受限"),
+    CREDIT_APPEAL_NOT_ALLOWED(1012, "只能申诉 30 天内自己的扣分记录"),
+    CREDIT_APPEAL_EXISTS(1013, "这条记录已经申诉过"),
+    CAPTCHA_INVALID(1014, "图形验证码错误或已过期"),
+    CAPTCHA_REQUIRED(1015, "请输入图形验证码"),
     FILE_TYPE_NOT_ALLOWED(1101, "文件类型不允许"),
     FILE_TOO_LARGE(1102, "文件超过 5MB"),
 
@@ -53,6 +57,8 @@ public enum ErrorCode {
     CANCEL_TOO_MANY(5005, "今日取消订单次数过多，明天再试"),
     TRADE_MODE_UNSUPPORTED(5006, "商品不支持该交易方式"),
     ORDER_STATE_INVALID(5007, "当前订单状态不允许此操作"),
+    MEET_CODE_WRONG(5008, "核销码错误"),
+    MEET_CODE_LOCKED(5009, "核销码错误次数过多，请让买家在订单页确认完成"),
 
     REVIEW_NOT_ALLOWED(6001, "当前不可评价"),
     REVIEW_DUPLICATED(6002, "已评价过"),

@@ -2,9 +2,9 @@
 import { files, route, type Auth, type Ctx } from './plugin'
 import {
   addCredit, afterSales, ago, anns, balanceLogs, blocks, brief, campusName, campuses, categories, categoryPath, convOf, convs,
-  CREDIT_REASON, creditLevel, creditLogs, favorites, fmt, goods, goodsById, hitWordsIn, hotWords, isBlocked, later, maskWords,
+  CREDIT_REASON, creditAppeals, creditLevel, creditLogs, favorites, follows, fmt, goods, goodsById, hitWordsIn, hotWords, isBlocked, later, maskWords,
   MockError, money, msgs, nextId, nextMsgId, notify, notis, orderLogs, orders, page, payments, peerOf, REVIEW_TAGS, reports,
-  reviews, school, userById, users, wants, type AfterSaleRow, type ConvRow, type GoodsRow, type MsgRow, type OrderRow,
+  reviews, school, userById, users, wantResponses, wants, type AfterSaleRow, type ConvRow, type GoodsRow, type MsgRow, type OrderRow,
 } from './db'
 
 const get = (p: string, a: Auth, h: (c: Ctx) => unknown) => route('U GET', p, a, h)
@@ -55,7 +55,7 @@ function actions(o: OrderRow, uid: string): string[] {
   const canReview = o.status === 70 && !reviewed && !!o.reviewDeadline && o.reviewDeadline > fmt()
   const map: Record<number, string[]> = buyer
     ? { 10: ['CANCEL'], 20: ['COMPLETE', 'CANCEL'], 30: ['PAY', 'CANCEL'], 40: ['APPLY_CANCEL'], 50: ['CONFIRM_RECEIPT', 'APPLY_REFUND'] }
-    : { 10: ['SELLER_CONFIRM', 'CANCEL'], 20: ['CANCEL'], 30: ['CANCEL'], 40: ['DELIVER'] }
+    : { 10: ['SELLER_CONFIRM', 'CANCEL'], 20: ['VERIFY_MEET_CODE', 'CANCEL'], 30: ['CANCEL'], 40: ['DELIVER'] }
   return [...(map[o.status] ?? []), ...(canReview ? ['REVIEW'] : [])]
 }
 function asActions(a: AfterSaleRow, uid: string): string[] {
@@ -134,6 +134,7 @@ function orderDetail(o: OrderRow, uid: string) {
   const rb = (r?: typeof mine) => (r ? { rating: r.rating, content: r.content, tags: r.tags, createdAt: r.createdAt } : null)
   return {
     id: o.id, orderNo: o.orderNo, myRole,
+    meetCode: myRole === 'BUYER' && o.status === 20 ? o.meetCode ?? null : null,
     goods: { id: o.goodsId, title: o.goodsTitle, cover: o.goodsCover, unitPrice: money(o.unitPrice), location: g?.location ?? null, campusName: campusName(g?.campusId ?? '1') },
     quantity: o.quantity, totalAmount: money(o.totalAmount), tradeMode: o.tradeMode, status: o.status,
     buyer: brief(o.buyerId), seller: brief(o.sellerId), conversationId: convOf(o.buyerId, o.sellerId)?.id ?? null,
@@ -174,7 +175,25 @@ export function registerUserRoutes() {
   })
 
   /* 3. 账号 */
+  // 图形验证码（P2）：Mock 用 SVG 画字，答案打印在 dev server 控制台
+  const captchas = new Map<string, string>()
+  const loginFails = new Map<string, number>()
+  const checkCaptcha = (id: unknown, code: unknown) => {
+    const expect = captchas.get(String(id ?? ''))
+    captchas.delete(String(id ?? ''))
+    if (!expect || String(code ?? '').trim().toUpperCase() !== expect) err(1014, '图形验证码错误或已过期')
+  }
+  get('/auth/captcha', 'public', () => {
+    const chars = '23456789ABCDEFGHJKMNPQRSTUVWXYZ'
+    const text = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+    const id = Math.random().toString(36).slice(2)
+    captchas.set(id, text)
+    console.log(`[mock] 图形验证码 ${id} → ${text}`)
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="40"><rect width="120" height="40" fill="#F5F6F8"/>${[...text].map((c, i) => `<text x="${14 + i * 26}" y="29" font-size="24" font-family="sans-serif" font-weight="700" fill="#334155" transform="rotate(${(i % 2 ? 1 : -1) * 10} ${20 + i * 26} 20)">${c}</text>`).join('')}</svg>`
+    return { captchaId: id, image: `data:image/svg+xml;base64,${btoa(svg)}`, expiresIn: 300 }
+  })
   post('/auth/email-codes', 'public', ({ body }) => {
+    checkCaptcha(body.captchaId, body.captchaCode)
     const email = String(body.email ?? '')
     if (!email.endsWith(school.emailSuffix)) return err(1001, '仅支持 @wu.edu.cn 校园邮箱')
     const exists = users.some((x) => x.email === email)
@@ -199,9 +218,18 @@ export function registerUserRoutes() {
     return loginResult(id)
   })
   post('/auth/login', 'public', ({ body }) => {
+    const fails = loginFails.get(body.email) ?? 0
+    if (fails >= 3) {
+      if (!body.captchaId) return err(1015, '请输入图形验证码')
+      checkCaptcha(body.captchaId, body.captchaCode)
+    }
     const x = users.find((y) => y.email === body.email)
-    if (!x || x.password !== body.password) return err(1005, '邮箱或密码错误', { remainingAttempts: 4 })
+    if (!x || x.password !== body.password) {
+      loginFails.set(body.email, fails + 1)
+      return err(1005, '邮箱或密码错误', { remainingAttempts: Math.max(0, 4 - fails), captchaRequired: fails + 1 >= 3 })
+    }
     if (x.status === 2) return err(1009, '账号已封禁', { banUntil: x.banUntil })
+    loginFails.delete(body.email)
     return loginResult(x.id)
   })
   post('/auth/logout', 'user', () => null)
@@ -226,7 +254,7 @@ export function registerUserRoutes() {
         boughtCount: orders.filter((o) => o.buyerId === id && o.status === 70).length,
         favoriteCount: favorites.filter((f) => f.userId === id).length, goodRate: goodRate(id),
       },
-      createdAt: x.createdAt,
+      createdAt: x.createdAt, emailNotify: !!x.emailNotify,
     }
   }
   get('/users/me', 'user', ({ uid }) => meOut(uid))
@@ -234,6 +262,7 @@ export function registerUserRoutes() {
     const x = userById(uid)!
     for (const k of ['nickname', 'avatarUrl', 'college', 'campusId'] as const) if (body[k] !== undefined) (x as any)[k] = body[k]
     if (body.bio !== undefined) x.bio = maskWords(String(body.bio))
+    if (body.emailNotify !== undefined) x.emailNotify = !!body.emailNotify
     return meOut(uid)
   })
   put('/users/me/password', 'user', ({ uid, body }) => {
@@ -243,7 +272,41 @@ export function registerUserRoutes() {
     x.password = body.newPassword
     return { token: `mock-user.${uid}`, expiresIn: 604800 }
   })
-  get('/users/me/credit-logs', 'user', ({ uid, query }) => page(creditLogs.filter((c) => c.userId === uid).reverse().map(({ userId: _u, ...c }) => ({ ...c, reasonText: CREDIT_REASON[c.reasonType] })), query))
+  const APPEAL_SINCE = () => fmt(new Date(Date.now() - 30 * 86400000))
+  get('/users/me/credit-logs', 'user', ({ uid, query }) => page(creditLogs.filter((c) => c.userId === uid).reverse().map(({ userId: _u, ...c }) => {
+    const ap = creditAppeals.find((a) => a.creditLogId === c.id)
+    return { ...c, reasonText: CREDIT_REASON[c.reasonType], appealable: c.delta < 0 && c.reasonType !== 8 && c.createdAt > APPEAL_SINCE() && !ap, appealStatus: ap?.status ?? null }
+  }), query))
+  const appealOut = (a: (typeof creditAppeals)[number]) => {
+    const l = creditLogs.find((c) => c.id === a.creditLogId)
+    return { id: a.id, creditLogId: a.creditLogId, delta: a.delta, reasonText: l ? CREDIT_REASON[l.reasonType] : null, reason: a.reason, status: a.status, reply: a.reply, handledAt: a.handledAt, createdAt: a.createdAt }
+  }
+  post('/users/me/credit-logs/:id/appeal', 'user', ({ uid, params, body }) => {
+    const l = creditLogs.find((c) => c.id === params.id)
+    if (!l || l.userId !== uid || l.delta >= 0 || l.reasonType === 8 || l.createdAt <= APPEAL_SINCE()) return err(1012, '只能申诉 30 天内自己的扣分记录')
+    if (creditAppeals.some((a) => a.creditLogId === l.id)) return err(1013, '这条记录已经申诉过')
+    const reason = String(body.reason ?? '').trim()
+    if (!reason || reason.length > 500) return err(400, '申诉理由为 1–500 字')
+    const a = { id: nextId(), userId: uid, creditLogId: l.id, delta: l.delta, reason, status: 0, reply: null, handledAt: null, createdAt: fmt() }
+    creditAppeals.push(a)
+    return appealOut(a)
+  })
+  get('/users/me/credit-appeals', 'user', ({ uid, query }) => page(creditAppeals.filter((a) => a.userId === uid).reverse().map(appealOut), query))
+  get('/users/me/follows', 'user', ({ uid, query }) => page(follows.filter((f) => f.userId === uid).reverse().map((f) => {
+    const x = userById(f.followeeId)!
+    return { userId: x.id, nickname: x.nickname, avatarUrl: x.avatarUrl, creditLevel: creditLevel(x.creditScore), onSaleCount: goods.filter((g) => g.sellerId === x.id && g.status === 2 && !g.deleted).length, followedAt: f.createdAt }
+  }), query))
+  post('/users/:id/follow', 'user', ({ uid, params }) => {
+    if (uid === params.id) return err(400, '不能关注自己')
+    if (!userById(params.id)) return err(404, '用户不存在')
+    if (!follows.some((f) => f.userId === uid && f.followeeId === params.id)) follows.push({ userId: uid, followeeId: params.id, createdAt: fmt() })
+    return null
+  })
+  del('/users/:id/follow', 'user', ({ uid, params }) => {
+    const i = follows.findIndex((f) => f.userId === uid && f.followeeId === params.id)
+    if (i >= 0) follows.splice(i, 1)
+    return null
+  })
   get('/users/me/balance-logs', 'user', ({ uid, query }) => page(balanceLogs.filter((b) => b.userId === uid).reverse().map((b) => ({
     id: b.id, amount: `+${money(b.amount)}`, balanceAfter: money(b.balanceAfter), type: b.type, orderId: b.orderId,
     orderNo: orders.find((o) => o.id === b.orderId)?.orderNo ?? b.orderId, createdAt: b.createdAt,
@@ -259,7 +322,8 @@ export function registerUserRoutes() {
   get('/users/me/favorites', 'user', ({ uid, query }) => page(favorites.filter((f) => f.userId === uid).reverse()
     .map((f) => ({ g: goods.find((x) => x.id === f.goodsId), f })).filter(({ g }) => g && !g.deleted)
     .map(({ g, f }) => ({ ...goodsItem(g!), status: g!.status, favoritedAt: f.createdAt })), query))
-  get('/users/me/wants', 'user', ({ uid, query }) => page(wants.filter((w) => w.userId === uid && !w.deleted && (query.status === undefined || w.status === Number(query.status))).map(wantOut), query))
+  get('/users/me/wants', 'user', ({ uid, query }) => page(wants.filter((w) => w.userId === uid && !w.deleted && (query.status === undefined || w.status === Number(query.status)))
+    .map((w) => ({ ...wantOut(w), isMine: true, responseCount: wantResponses.filter((r) => r.wantId === w.id).length })), query))
   get('/users/me/blocks', 'user', ({ uid, query }) => page(blocks.filter((b) => b.userId === uid).map((b) => ({ userId: b.blockedUserId, nickname: userById(b.blockedUserId)!.nickname, avatarUrl: null, createdAt: b.createdAt })), query))
   post('/users/:id/block', 'user', ({ uid, params }) => {
     if (uid === params.id) return err(400, '不能拉黑自己')
@@ -281,6 +345,7 @@ export function registerUserRoutes() {
       onSaleCount: goods.filter((g) => g.sellerId === x.id && g.status === 2 && !g.deleted).length,
       soldCount: orders.filter((o) => o.sellerId === x.id && o.status === 70).length + 30,
       blocked: uid ? isBlocked(uid, x.id) : false, joinedAt: x.createdAt.slice(0, 10), status: x.status,
+      followed: !!uid && follows.some((f) => f.userId === uid && f.followeeId === x.id), followerCount: follows.filter((f) => f.followeeId === x.id).length,
     }
   })
   get('/users/:id/goods', 'public', ({ params, query }) => page(goods.filter((g) => g.sellerId === params.id && g.status === 2 && !g.deleted).map(goodsItem), query))
@@ -309,6 +374,14 @@ export function registerUserRoutes() {
     return page(list.map(goodsItem), query)
   })
   get('/search/hot-words', 'public', () => hotWords.slice(0, 10))
+  // 猜你喜欢（P2）：Mock 按收藏过的分类推荐，没有收藏时按浏览量
+  get('/goods/recommend', 'optional', ({ uid, query }) => {
+    const size = Math.min(Number(query.size ?? 10), 20)
+    const favCats = new Set(favorites.filter((f) => f.userId === uid).map((f) => goodsById(f.goodsId)?.categoryId))
+    return goods.filter((g) => g.status === 2 && !g.deleted && g.sellerId !== uid && !(uid && isBlocked(g.sellerId, uid)))
+      .sort((a, b) => Number(favCats.has(b.categoryId)) - Number(favCats.has(a.categoryId)) || b.viewCount - a.viewCount)
+      .slice(0, size).map(goodsItem)
+  })
   get('/goods/:id', 'optional', ({ uid, params }) => {
     const g = goodsById(params.id) ?? err(2001, '商品不存在')
     const isMine = g.sellerId === uid
@@ -453,6 +526,11 @@ export function registerUserRoutes() {
     const peer = String(body.peerUserId)
     if (peer === uid) return err(400, '不能和自己聊天')
     if (!userById(peer)) return err(404, '用户不存在')
+    if (body.wantId) {
+      const w = wants.find((x) => x.id === String(body.wantId) && !x.deleted && x.status === 0 && x.expireAt > fmt()) ?? err(3002, '求购帖不存在或已结束')
+      if (w.userId !== peer) return err(400, '只能联系求购发布者')
+      if (!wantResponses.some((r) => r.wantId === w.id && r.responderId === uid)) wantResponses.push({ wantId: w.id, responderId: uid })
+    }
     let c = convOf(uid, peer)
     if (!c) {
       c = { id: nextId(), small: uid < peer ? uid : peer, big: uid < peer ? peer : uid, goodsId: null, lastMessage: null, lastMessageAt: null, smallUnread: 0, bigUnread: 0 }
@@ -554,7 +632,14 @@ export function registerUserRoutes() {
   get('/orders/:id', 'user', ({ uid, params }) => orderDetail(mustOrder(params.id, uid), uid))
   post('/orders/:id/seller-confirm', 'user', ({ uid, params }) => {
     const o = mustOrder(params.id, uid); need(o, uid, 'SELLER_CONFIRM')
-    o.sellerConfirmedAt = fmt(); transit(o, 20, 'SELLER_CONFIRM', 2, uid); return null
+    o.sellerConfirmedAt = fmt(); o.meetCode = String(Math.floor(Math.random() * 1e6)).padStart(6, '0')
+    console.log(`[mock] 订单 ${o.id} 面交核销码 → ${o.meetCode}`)
+    transit(o, 20, 'SELLER_CONFIRM', 2, uid); return null
+  })
+  post('/orders/:id/verify-meet-code', 'user', ({ uid, params, body }) => {
+    const o = mustOrder(params.id, uid); need(o, uid, 'VERIFY_MEET_CODE')
+    if (String(body.code ?? '').trim() !== o.meetCode) return err(5008, '核销码错误')
+    transit(o, 70, 'VERIFY_MEET_CODE', 2, uid); finish(o); return null
   })
   post('/orders/:id/complete', 'user', ({ uid, params }) => {
     const o = mustOrder(params.id, uid); need(o, uid, 'COMPLETE')

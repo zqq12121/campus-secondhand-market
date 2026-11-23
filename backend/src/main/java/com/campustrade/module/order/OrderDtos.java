@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
@@ -24,6 +25,9 @@ public final class OrderDtos {
     }
 
     public record CreateResp(Long id, String orderNo, Integer status, LocalDateTime payExpireAt) {
+    }
+
+    public record VerifyMeetCodeReq(@NotBlank @Pattern(regexp = "\\s*\\d{6}\\s*", message = "核销码为 6 位数字") String code) {
     }
 
     public record CancelReq(@NotBlank @Size(max = 200) String reason) {
@@ -60,6 +64,6 @@ public final class OrderDtos {
                            BigDecimal totalAmount, Integer tradeMode, Integer status, UserBrief buyer,
                            UserBrief seller, Long conversationId, Timeline timeline, Deadline deadline,
                            String cancelReason, Integer cancelBy, Object payment, Object afterSale,
-                           ReviewBlock review, List<String> actions, List<LogVO> logs) {
+                           ReviewBlock review, List<String> actions, List<LogVO> logs, String meetCode) {
     }
 }

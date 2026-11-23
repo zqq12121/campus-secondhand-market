@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.campustrade.common.Biz;
+import com.campustrade.common.Consts.CreditReason;
 import com.campustrade.common.Consts.GoodsStatus;
 import com.campustrade.common.Consts.OrderStatus;
 import com.campustrade.common.Consts.UserStatus;
@@ -13,6 +14,7 @@ import com.campustrade.common.PageQuery;
 import com.campustrade.common.PageResult;
 import com.campustrade.entity.BalanceLog;
 import com.campustrade.entity.Campus;
+import com.campustrade.entity.CreditAppeal;
 import com.campustrade.entity.CreditLog;
 import com.campustrade.entity.Favorite;
 import com.campustrade.entity.Goods;
@@ -20,15 +22,18 @@ import com.campustrade.entity.Review;
 import com.campustrade.entity.TradeOrder;
 import com.campustrade.entity.User;
 import com.campustrade.entity.UserBlock;
+import com.campustrade.entity.UserFollow;
 import com.campustrade.infra.SensitiveWordService;
 import com.campustrade.mapper.BalanceLogMapper;
 import com.campustrade.mapper.CampusMapper;
+import com.campustrade.mapper.CreditAppealMapper;
 import com.campustrade.mapper.CreditLogMapper;
 import com.campustrade.mapper.FavoriteMapper;
 import com.campustrade.mapper.GoodsMapper;
 import com.campustrade.mapper.ReviewMapper;
 import com.campustrade.mapper.TradeOrderMapper;
 import com.campustrade.mapper.UserBlockMapper;
+import com.campustrade.mapper.UserFollowMapper;
 import com.campustrade.mapper.UserMapper;
 import com.campustrade.module.auth.AuthService;
 import com.campustrade.module.user.UserDtos.BalanceLogVO;
@@ -48,6 +53,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -67,6 +73,8 @@ public class UserService {
     private final CreditLogMapper creditLogMapper;
     private final BalanceLogMapper balanceLogMapper;
     private final UserBlockMapper blockMapper;
+    private final UserFollowMapper followMapper;
+    private final CreditAppealMapper appealMapper;
     private final SensitiveWordService sensitiveWordService;
     private final PasswordEncoder passwordEncoder;
     private final TokenStore tokenStore;
@@ -132,7 +140,7 @@ public class UserService {
         return new MeVO(u.getId(), u.getEmail(), true, u.getNickname(), u.getAvatarUrl(), u.getCollege(),
                 u.getCampusId(), campusName(u.getCampusId()), u.getBio(), u.getCreditScore(),
                 CreditLevel.of(u.getCreditScore()).name(), u.getBalance(), u.getStatus(), u.getBanUntil(), stats,
-                u.getCreatedAt());
+                u.getCreatedAt(), Integer.valueOf(1).equals(u.getEmailNotify()));
     }
 
     public MeVO updateMe(long id, UpdateMeReq req) {
@@ -155,6 +163,10 @@ public class UserService {
             Campus c = campusMapper.selectById(req.campusId());
             Biz.check(c != null && c.getSchoolId().equals(u.getSchoolId()), ErrorCode.BAD_REQUEST, "校区不存在");
             w.set(User::getCampusId, req.campusId());
+            changed = true;
+        }
+        if (req.emailNotify() != null) {
+            w.set(User::getEmailNotify, req.emailNotify() ? 1 : 0);
             changed = true;
         }
         if (req.bio() != null) {
@@ -180,8 +192,17 @@ public class UserService {
     public PageResult<CreditLogVO> creditLogs(long userId, PageQuery pq) {
         Page<CreditLog> page = creditLogMapper.selectPage(pq.toPage(), new LambdaQueryWrapper<CreditLog>()
                 .eq(CreditLog::getUserId, userId).orderByDesc(CreditLog::getId));
+        List<Long> ids = page.getRecords().stream().map(CreditLog::getId).toList();
+        Map<Long, Integer> appeals = ids.isEmpty() ? Map.of() : appealMapper.selectList(
+                        new LambdaQueryWrapper<CreditAppeal>().in(CreditAppeal::getCreditLogId, ids))
+                .stream().collect(Collectors.toMap(CreditAppeal::getCreditLogId, CreditAppeal::getStatus));
+        LocalDateTime appealSince = LocalDateTime.now().minusDays(CreditAppealService.APPEAL_DAYS);
         return PageResult.of(page, c -> new CreditLogVO(c.getId(), c.getDelta(), c.getScoreAfter(), c.getReasonType(),
-                CreditService.reasonText(c.getReasonType()), c.getRefId(), c.getRemark(), c.getCreatedAt()));
+                CreditService.reasonText(c.getReasonType()), c.getRefId(), c.getRemark(), c.getCreatedAt(),
+                // 与 CreditAppealService.apply 的校验一致
+                c.getDelta() < 0 && c.getReasonType() != CreditReason.APPEAL_PASSED
+                        && c.getCreatedAt().isAfter(appealSince) && !appeals.containsKey(c.getId()),
+                appeals.get(c.getId())));
     }
 
     public PageResult<BalanceLogVO> balanceLogs(long userId, PageQuery pq) {
@@ -233,7 +254,10 @@ public class UserService {
         return new ProfileVO(u.getId(), u.getNickname(), u.getAvatarUrl(), u.getCollege(), campusName(u.getCampusId()),
                 u.getBio(), score, CreditLevel.of(score).name(), score >= 90, goodRate(id), (int) reviewCount(id),
                 onSaleCount(id), finishedOrders(id, false), viewerId != null && isBlocked(viewerId, id),
-                u.getStatus(), u.getCreatedAt().toLocalDate());
+                u.getStatus(), u.getCreatedAt().toLocalDate(),
+                viewerId != null && followMapper.exists(new LambdaQueryWrapper<UserFollow>()
+                        .eq(UserFollow::getUserId, viewerId).eq(UserFollow::getFolloweeId, id)),
+                followMapper.selectCount(new LambdaQueryWrapper<UserFollow>().eq(UserFollow::getFolloweeId, id)).intValue());
     }
 
     private long reviewCount(long userId) {

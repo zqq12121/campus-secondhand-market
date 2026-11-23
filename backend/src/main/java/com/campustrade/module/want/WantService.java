@@ -1,6 +1,7 @@
 package com.campustrade.module.want;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.campustrade.common.Biz;
@@ -12,9 +13,11 @@ import com.campustrade.common.PageResult;
 import com.campustrade.entity.Category;
 import com.campustrade.entity.User;
 import com.campustrade.entity.WantPost;
+import com.campustrade.entity.WantResponse;
 import com.campustrade.infra.SensitiveWordService;
 import com.campustrade.mapper.CategoryMapper;
 import com.campustrade.mapper.WantPostMapper;
+import com.campustrade.mapper.WantResponseMapper;
 import com.campustrade.module.common.CommonService;
 import com.campustrade.module.goods.GoodsDtos.SellerBrief;
 import com.campustrade.module.user.UserService;
@@ -43,6 +46,7 @@ public class WantService {
     private static final BigDecimal MAX_PRICE = new BigDecimal("99999");
 
     private final WantPostMapper wantMapper;
+    private final WantResponseMapper responseMapper;
     private final CategoryMapper categoryMapper;
     private final UserService userService;
     private final CommonService commonService;
@@ -73,7 +77,8 @@ public class WantService {
 
     public record WantVO(Long id, String title, String description, Long categoryId, String categoryName,
                          BigDecimal priceMin, BigDecimal priceMax, String campusName, Integer status,
-                         LocalDateTime expireAt, SellerBrief user, LocalDateTime createdAt, Boolean isMine) {
+                         LocalDateTime expireAt, SellerBrief user, LocalDateTime createdAt, Boolean isMine,
+                         Integer responseCount) {
     }
 
     // ---------------------------------------------------------------- 查询
@@ -195,12 +200,26 @@ public class WantService {
         Map<Long, String> categories = categoryMapper.selectByIds(posts.stream().map(WantPost::getCategoryId)
                 .distinct().toList()).stream().collect(Collectors.toMap(Category::getId, Category::getName));
         Map<Long, String> campus = commonService.campusNames();
+        Map<Long, Integer> responses = responseCounts(posts.stream()
+                .filter(p -> p.getUserId().equals(viewerId)).map(WantPost::getId).toList());
         // 已到期但定时任务还没处理的帖子，按已过期展示
         return posts.stream().map(p -> new WantVO(p.getId(), p.getTitle(), p.getDescription(), p.getCategoryId(),
                 categories.get(p.getCategoryId()), p.getPriceMin(), p.getPriceMax(), campus.get(p.getCampusId()),
                 p.getStatus() == WantStatus.ACTIVE && !isActive(p) ? WantStatus.EXPIRED : p.getStatus(),
                 p.getExpireAt(), brief(users.get(p.getUserId())), p.getCreatedAt(),
-                viewerId == null ? null : p.getUserId().equals(viewerId))).toList();
+                viewerId == null ? null : p.getUserId().equals(viewerId),
+                p.getUserId().equals(viewerId) ? responses.getOrDefault(p.getId(), 0) : null)).toList();
+    }
+
+    /** 收到几次「我有」；只统计给发布者看 */
+    private Map<Long, Integer> responseCounts(List<Long> wantIds) {
+        if (wantIds.isEmpty()) {
+            return Map.of();
+        }
+        return responseMapper.selectMaps(new QueryWrapper<WantResponse>().select("want_id", "COUNT(*) AS cnt")
+                        .in("want_id", wantIds).groupBy("want_id")).stream()
+                .collect(Collectors.toMap(m -> ((Number) m.get("want_id")).longValue(),
+                        m -> ((Number) m.get("cnt")).intValue()));
     }
 
     private static SellerBrief brief(User u) {

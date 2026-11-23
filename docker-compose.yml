@@ -1,6 +1,7 @@
 # 本地开发依赖：MySQL 8 + Redis + RabbitMQ。密码从同目录 .env 读取（参考 .env.example）
 # docker compose up -d                 只起依赖，后端 / 前端在本机跑
 # docker compose --profile app up -d   连同后端 + 前端（Nginx）一起起，访问 http://localhost:${WEB_PORT:-8088}
+# docker compose --profile es up -d    额外起 Elasticsearch，后端设 SEARCH_ENGINE=es 后关键词搜索走 ES
 name: campus-trade
 services:
   mysql:
@@ -24,8 +25,12 @@ services:
   redis:
     image: redis:8.2-alpine
     container_name: campus-trade-redis
+    # 开 AOF 持久化：agent 的会话记忆与向量索引存在这里（镜像入口会自动追加向量 / JSON 模块）
+    command: ["redis-server", "--appendonly", "yes"]
     ports:
       - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
 
   rabbitmq:
     image: rabbitmq:4.1-management-alpine
@@ -33,6 +38,21 @@ services:
     ports:
       - "${RABBITMQ_PORT:-5672}:5672"
       - "15672:15672"
+
+  elasticsearch:
+    profiles: ["es"]
+    build: ./docker/elasticsearch
+    image: campus-trade-es
+    container_name: campus-trade-es
+    environment:
+      discovery.type: single-node
+      # 仅本机开发使用；对外部署需开启安全认证
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    ports:
+      - "${ES_PORT:-9200}:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
 
   backend:
     profiles: ["app"]
@@ -47,6 +67,7 @@ services:
       REDIS_PORT: 6379
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
+      ES_URIS: http://elasticsearch:9200
       # 经 Nginx 转发，按 X-Forwarded-For 取真实 IP（限流按 IP 计）
       SERVER_FORWARD_HEADERS_STRATEGY: native
       # 固定为数据卷路径，避免 .env 里给本机开发用的相对路径把文件写到卷外（重建容器即丢失）
@@ -72,7 +93,31 @@ services:
       - "${WEB_PORT:-8088}:80"
     depends_on:
       - backend
+      - ai
+
+  ai:
+    profiles: ["app"]
+    build: ./ai-service
+    image: campus-trade-ai
+    container_name: campus-trade-ai
+    env_file: .env
+    environment:
+      BACKEND_BASE_URL: http://backend:8080
+      # 与 backend 保持一致：用户图片地址按这个前缀校验，再经 BACKEND_BASE_URL 内网读取
+      UPLOAD_PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8088}/uploads
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    volumes:
+      - hf-cache:/root/.cache/huggingface
+    depends_on:
+      - backend
+      - redis
 
 volumes:
   mysql-data:
   uploads:
+  redis-data:
+  hf-cache:
+  es-data:

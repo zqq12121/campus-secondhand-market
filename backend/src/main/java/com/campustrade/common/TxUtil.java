@@ -21,4 +21,18 @@ public final class TxUtil {
             task.run();
         }
     }
+
+    /** 事务回滚后执行（撤销事务外已经做的副作用）；没有事务时不执行 */
+    public static void afterRollback(Runnable task) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCompletion(int status) {
+                    if (status == STATUS_ROLLED_BACK) {
+                        task.run();
+                    }
+                }
+            });
+        }
+    }
 }

@@ -25,6 +25,7 @@ const MENU = [
     { to: 'orders', icon: 'file', name: '订单查询', perm: 'order:view' },
     { to: 'disputes', icon: 'scale', name: '纠纷裁决', perm: 'dispute:handle', count: 'disputes' },
     { to: 'reports', icon: 'flag', name: '举报处理', perm: 'report:handle', count: 'reports' },
+    { to: 'credit-appeals', icon: 'shield', name: '信用分申诉', perm: 'user:credit-appeal' },
   ] },
   { group: '运营', items: [{ to: 'content', icon: 'sliders', name: '内容运营', perm: ['category:manage', 'content:manage'] }] },
   { group: '系统', items: [{ to: 'system', icon: 'lock', name: '权限与日志', perm: ['system:admin', 'system:role', 'system:log'] }] },

@@ -44,6 +44,12 @@ public class GoodsController {
         return R.ok(goodsService.hotWords());
     }
 
+    /** 猜你喜欢：登录后按兴趣推荐，未登录返回热门 */
+    @GetMapping("/goods/recommend")
+    public R<List<GoodsCard>> recommend(@RequestParam(required = false) Integer size) {
+        return R.ok(goodsService.recommend(CurrentUser.idOrNull(), size));
+    }
+
     @GetMapping("/goods/{id}")
     public R<DetailVO> detail(@PathVariable long id, HttpServletRequest http) {
         return R.ok(goodsService.detail(id, CurrentUser.idOrNull(), http.getRemoteAddr()));

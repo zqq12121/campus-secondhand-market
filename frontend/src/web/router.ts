@@ -28,6 +28,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/order/:id', name: 'order', component: () => import('./views/OrderView.vue'), meta: { title: '订单详情', auth: true, nav: 'me', noTabbar: true } },
   { path: '/order/:id/review', name: 'review', component: () => import('./views/ReviewView.vue'), meta: { title: '评价交易', auth: true, nav: 'me', noTabbar: true } },
   { path: '/me', name: 'me', component: () => import('./views/MeView.vue'), meta: { title: '个人中心', auth: true, nav: 'me' } },
+  { path: '/me/preferences', name: 'preferences', component: () => import('./views/PreferencesView.vue'), meta: { title: '助手偏好', auth: true, nav: 'me', noTabbar: true } },
   { path: '/users/:id', name: 'user', component: () => import('./views/UserView.vue'), meta: { title: '用户主页' } },
   { path: '/notifications', name: 'notifications', component: () => import('./views/NotificationsView.vue'), meta: { title: '消息通知', auth: true, nav: 'notice' } },
   { path: '/announcements/:id', name: 'announcement', component: () => import('./views/AnnouncementView.vue'), meta: { title: '平台公告', noTabbar: true } },

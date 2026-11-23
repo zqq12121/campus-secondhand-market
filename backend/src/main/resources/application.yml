@@ -4,6 +4,8 @@ server:
 spring:
   application:
     name: campus-trade
+  elasticsearch:
+    uris: ${ES_URIS:http://localhost:9200}
   datasource:
     url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DB:campus_trade}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
     username: ${MYSQL_USER:root}
@@ -86,6 +88,10 @@ app:
     after-sale-appeal-timeout: ${RULE_AFTER_SALE_APPEAL_TIMEOUT:48h}
     review-days: 15
     daily-cancel-limit: 5
+  search:
+    # mysql：MySQL ngram 全文索引；es：Elasticsearch（docker compose --profile es 启动），ES 出错时自动退回 mysql
+    engine: ${SEARCH_ENGINE:mysql}
+    sync-interval: ${SEARCH_SYNC_INTERVAL_MS:30000}
   pay:
     # alipay：支付宝开放平台（沙箱）；mock：本地模拟收银台
     mode: ${PAY_MODE:mock}

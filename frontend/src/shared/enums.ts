@@ -23,7 +23,8 @@ export const RATING: Label = { 1: '好评', 2: '中评', 3: '差评' }
 export const REPORT_TARGET: Label = { 1: '商品', 2: '用户', 3: '求购帖' }
 export const REPORT_REASON: Label = { 1: '禁售品', 2: '虚假信息', 3: '诈骗', 4: '辱骂骚扰', 5: '其他' }
 export const REPORT_STATUS: Label = { 0: '待处理', 1: '成立', 2: '不成立' }
-export const NOTIFICATION_TYPE: Label = { 1: '订单', 2: '审核', 3: '求购匹配', 4: '举报结果', 5: '信用分', 6: '系统公告' }
+export const NOTIFICATION_TYPE: Label = { 1: '订单', 2: '审核', 3: '求购匹配', 4: '举报结果', 5: '信用分', 6: '系统公告', 7: '关注上新', 8: '降价提醒' }
+export const CREDIT_APPEAL_STATUS: Label = { 0: '申诉处理中', 1: '申诉已通过', 2: '申诉被驳回' }
 export const USER_STATUS: Label = { 0: '正常', 1: '禁言', 2: '封禁' }
 export const ANNOUNCEMENT_TYPE: Label = { 1: '公告', 2: '轮播图' }
 

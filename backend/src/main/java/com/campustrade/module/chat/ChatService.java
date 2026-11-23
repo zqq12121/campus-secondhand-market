@@ -26,6 +26,7 @@ import com.campustrade.mapper.ConversationMapper;
 import com.campustrade.mapper.GoodsMapper;
 import com.campustrade.mapper.MessageMapper;
 import com.campustrade.mapper.WantPostMapper;
+import com.campustrade.mapper.WantResponseMapper;
 import com.campustrade.module.user.UserService;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.validation.constraints.Max;
@@ -69,6 +70,7 @@ public class ChatService {
     private final MessageMapper messageMapper;
     private final GoodsMapper goodsMapper;
     private final WantPostMapper wantMapper;
+    private final WantResponseMapper wantResponseMapper;
     private final UserService userService;
     private final SensitiveWordService sensitiveWordService;
     private final FileStorageService fileStorageService;
@@ -127,11 +129,12 @@ public class ChatService {
             Biz.notNull(goodsMapper.selectById(req.goodsId()), ErrorCode.GOODS_NOT_FOUND);
         }
         if (req.wantId() != null) {
-            // 「我有」：只能找求购帖作者，且帖子仍在进行中（会话不记录 wantId）
+            // 「我有」：只能找求购帖作者，且帖子仍在进行中；会话不记录 wantId，响应记在 want_response
             WantPost w = wantMapper.selectById(req.wantId());
             Biz.check(w != null && w.getStatus() == WantStatus.ACTIVE && w.getExpireAt().isAfter(LocalDateTime.now()),
                     ErrorCode.WANT_NOT_FOUND);
             Biz.check(w.getUserId().equals(req.peerUserId()), ErrorCode.BAD_REQUEST, "只能联系求购发布者");
+            wantResponseMapper.insertIgnore(w.getId(), me);
         }
         Conversation c = getOrCreate(me, req.peerUserId(), req.goodsId());
         return detail(me, c.getId());

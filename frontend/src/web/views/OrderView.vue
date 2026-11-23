@@ -59,7 +59,7 @@ const headline = computed(() => {
   const b = isBuyer.value
   const map: Record<number, [string, string]> = {
     10: b ? ['等待卖家确认', '卖家确认后，在聊天里约好面交时间地点。'] : ['买家已下单，请确认', '确认后请和买家约好面交时间地点。'],
-    20: b ? ['待面交', '当面验货付款后，点「确认完成」。'] : ['待面交', '按约定时间地点和买家当面交易。'],
+    20: b ? ['待面交', '验货付款后，把下方核销码给卖家，或自己点「确认完成」。'] : ['待面交', '当面交易后，输入买家出示的核销码完成订单。'],
     30: b ? ['等待你付款', '请尽快完成支付，超时订单将自动取消。'] : ['等待买家付款', '买家付款后你会收到通知。'],
     40: b ? ['已付款，等待卖家交货', '卖家交货后请当面检查商品。'] : ['买家已付款，请交货', '把商品交给买家后点「已交货」。'],
     50: b ? ['卖家已交货，等待你确认收货', '请检查商品。确认后钱会打给卖家。'] : ['已交货，等待买家确认收货', '买家确认收货后，货款进入你的平台余额。'],
@@ -154,6 +154,7 @@ onBeforeUnmount(() => { clearInterval(tick); clearInterval(payPoll) })
           <p>{{ headline.desc }}</p>
           <p v-if="o.deadline" class="deadline"><AppIcon name="clock" size="sm" /> {{ remaining(o.deadline.at, now) }} {{ DEADLINE_TEXT[o.deadline.action] ?? '' }}</p>
           <p v-if="paying" class="deadline">正在确认支付结果…</p>
+          <p v-if="o.meetCode" class="meet-code" aria-label="面交核销码">核销码 <strong class="num">{{ o.meetCode }}</strong><span>验货满意后再给卖家，不要提前告诉对方</span></p>
         </div>
         <div class="row" style="flex-wrap: wrap">
           <button v-for="a in o.actions" :key="a" class="btn" :class="PRIMARY_ACTIONS.includes(a) || a === 'PAY' ? 'btn-light' : 'btn-outline-light'" @click="run(a, o.id)">{{ ACTION_TEXT[a] }}</button>
@@ -270,4 +271,7 @@ onBeforeUnmount(() => { clearInterval(tick); clearInterval(payPoll) })
 .timeline .d { width: 10px; height: 10px; border-radius: 50%; background: var(--border); margin-top: 6px; flex: none; }
 .timeline li:first-child .d { background: var(--primary); box-shadow: 0 0 0 4px var(--primary-soft); }
 @media (max-width: 768px) { .steps .step { font-size: 12px; } }
+.meet-code { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+.meet-code strong { font-size: 28px; letter-spacing: 6px; }
+.meet-code span { font-size: 13px; opacity: .85; }
 </style>

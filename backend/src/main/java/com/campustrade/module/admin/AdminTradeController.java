@@ -138,12 +138,17 @@ public class AdminTradeController {
     @PreAuthorize("hasAuthority('dispute:handle')")
     public R<DisputeDetail> dispute(@PathVariable long id) {
         AfterSale a = Biz.notNull(afterSaleMapper.selectById(id), ErrorCode.NOT_FOUND);
-        OrderLog appeal = logMapper.selectOne(new LambdaQueryWrapper<OrderLog>()
-                .eq(OrderLog::getOrderId, a.getOrderId()).eq(OrderLog::getAction, OrderStateMachine.APPEAL)
-                .orderByDesc(OrderLog::getId).last("LIMIT 1"));
+        String appealRemark = a.getAppealRemark();
+        if (appealRemark == null) {
+            // v1.3 之前的数据：介入说明只存在 order_log.remark
+            OrderLog appeal = logMapper.selectOne(new LambdaQueryWrapper<OrderLog>()
+                    .eq(OrderLog::getOrderId, a.getOrderId()).eq(OrderLog::getAction, OrderStateMachine.APPEAL)
+                    .orderByDesc(OrderLog::getId).last("LIMIT 1"));
+            appealRemark = appeal == null ? null : appeal.getRemark();
+        }
         MessagePage messages = disputeMessages(a, null, DISPUTE_MESSAGES);
         return R.ok(new DisputeDetail(afterSaleService.toVO(a, Operator.ADMIN), orderDetail(a.getOrderId()),
-                appeal == null ? null : appeal.getRemark(), messages.list(), messages.hasMore()));
+                appealRemark, messages.list(), messages.hasMore()));
     }
 
     @GetMapping("/disputes/{id}/messages")

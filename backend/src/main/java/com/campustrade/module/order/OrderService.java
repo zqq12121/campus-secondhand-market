@@ -11,6 +11,7 @@ import com.campustrade.common.Consts.OrderStatus;
 import com.campustrade.common.Consts.TradeMode;
 import com.campustrade.common.ErrorCode;
 import com.campustrade.common.PageQuery;
+import com.campustrade.common.TxUtil;
 import com.campustrade.config.AppProperties;
 import com.campustrade.entity.Conversation;
 import com.campustrade.entity.Goods;
@@ -44,6 +45,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -61,6 +63,8 @@ public class OrderService {
 
     private static final DateTimeFormatter NO_PREFIX = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
     private static final int STOCK_RETRY = 3;
+    private static final int MEET_CODE_MAX_FAIL = 5;
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     private final TradeOrderMapper orderMapper;
     private final OrderLogMapper logMapper;
@@ -72,8 +76,8 @@ public class OrderService {
     private final AfterSaleService afterSaleService;
     private final ChatService chatService;
     private final DelayPublisher delayPublisher;
-    private final StockCache stockCache;
     private final StringRedisTemplate redis;
+    private final StockCache stockCache;
     private final AppProperties props;
 
     // ------------------------------------------------------------------ 下单
@@ -109,6 +113,9 @@ public class OrderService {
         Biz.check(cancels == null || Integer.parseInt(cancels) < props.rules().dailyCancelLimit(),
                 ErrorCode.CANCEL_TOO_MANY);
 
+        Biz.check(stockCache.tryDeduct(req.goodsId(), req.quantity(), () -> onSaleStock(req.goodsId())),
+                ErrorCode.STOCK_NOT_ENOUGH);
+        TxUtil.afterRollback(() -> stockCache.giveBack(req.goodsId(), req.quantity()));
         Goods g = deductStock(buyerId, req);
         boolean guarantee = req.tradeMode() == TradeMode.GUARANTEE;
         if (guarantee) {
@@ -134,9 +141,14 @@ public class OrderService {
         return o;
     }
 
-    /** Redis 预扣 + 乐观锁扣库存，库存归 0 时商品进入"交易中" */
+    /** 预扣缓存的初始值：只缓存在售商品，其余情况交给数据库校验报具体错误 */
+    private Integer onSaleStock(long goodsId) {
+        Goods g = goodsMapper.selectById(goodsId);
+        return g != null && g.getStatus() == GoodsStatus.ON_SALE ? g.getStock() : null;
+    }
+
+    /** 乐观锁扣库存，库存归 0 时商品进入"交易中" */
     private Goods deductStock(long buyerId, CreateReq req) {
-        boolean reserved = false;
         for (int i = 0; i < STOCK_RETRY; i++) {
             Goods g = Biz.notNull(goodsMapper.selectById(req.goodsId()), ErrorCode.GOODS_NOT_FOUND);
             Biz.check(!g.getSellerId().equals(buyerId), ErrorCode.BUY_SELF);
@@ -145,10 +157,6 @@ public class OrderService {
                     ErrorCode.TRADE_MODE_UNSUPPORTED);
             Biz.check(!userService.isBlocked(g.getSellerId(), buyerId), ErrorCode.BLOCKED_BY_SELLER);
             Biz.check(g.getStock() >= req.quantity(), ErrorCode.STOCK_NOT_ENOUGH);
-            if (!reserved) {
-                stockCache.reserve(g.getId(), req.quantity(), g.getStock());
-                reserved = true;
-            }
             int left = g.getStock() - req.quantity();
             Goods upd = new Goods();
             upd.setId(g.getId());
@@ -176,8 +184,9 @@ public class OrderService {
     @Transactional
     public void sellerConfirm(long userId, long orderId) {
         TradeOrder o = requireParty(userId, orderId);
+        String meetCode = String.format("%06d", RANDOM.nextInt(1_000_000));
         flow.transit(o, OrderStateMachine.SELLER_CONFIRM, roleOf(o, userId), userId, null, null,
-                w -> w.set(TradeOrder::getSellerConfirmedAt, LocalDateTime.now()));
+                w -> w.set(TradeOrder::getSellerConfirmedAt, LocalDateTime.now()).set(TradeOrder::getMeetCode, meetCode));
         delayPublisher.schedule(DelayType.AUTO_COMPLETE, orderId, null);
     }
 
@@ -185,6 +194,23 @@ public class OrderService {
     public void complete(long userId, long orderId) {
         TradeOrder o = requireParty(userId, orderId);
         flow.finish(o, OrderStateMachine.COMPLETE, roleOf(o, userId), userId);
+    }
+
+    /** 面交核销：卖家输入买家出示的 6 位码完成交易；同一订单错 5 次后锁定，只能由买家确认完成 */
+    @Transactional
+    public void verifyMeetCode(long userId, long orderId, String code) {
+        TradeOrder o = requireParty(userId, orderId);
+        Biz.check(roleOf(o, userId) == Operator.SELLER && o.getStatus() == OrderStatus.WAIT_MEET,
+                ErrorCode.ORDER_STATE_INVALID);
+        String failKey = "order:meet:fail:" + orderId;
+        String fails = redis.opsForValue().get(failKey);
+        Biz.check(fails == null || Integer.parseInt(fails) < MEET_CODE_MAX_FAIL, ErrorCode.MEET_CODE_LOCKED);
+        if (o.getMeetCode() == null || !o.getMeetCode().equals(code.trim())) {
+            redis.opsForValue().increment(failKey);
+            redis.expire(failKey, Duration.ofDays(8));
+            throw new BizException(ErrorCode.MEET_CODE_WRONG);
+        }
+        flow.finish(o, OrderStateMachine.VERIFY_MEET_CODE, Operator.SELLER, userId);
     }
 
     @Transactional
@@ -278,7 +304,8 @@ public class OrderService {
                 new Timeline(o.getCreatedAt(), o.getSellerConfirmedAt(), o.getPaidAt(), o.getDeliveredAt(),
                         o.getFinishedAt(), o.getCanceledAt()),
                 deadline, o.getCancelReason(), o.getCancelBy(), paymentService.view(o.getId()),
-                afterSaleService.latestOf(o.getId(), role), review, actions, logs);
+                afterSaleService.latestOf(o.getId(), role), review, actions, logs,
+                role == Operator.BUYER && o.getStatus() == OrderStatus.WAIT_MEET ? o.getMeetCode() : null);
     }
 
     private List<String> actions(TradeOrder o, int role, boolean reviewed) {

@@ -41,6 +41,9 @@ public class AfterSale {
 
     private String sellerReply;
 
+    /** 买家申请平台介入时的补充说明 */
+    private String appealRemark;
+
     /** 卖家处理截止时间，超时自动同意 */
     private LocalDateTime sellerDeadline;
 

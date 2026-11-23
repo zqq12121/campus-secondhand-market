@@ -22,21 +22,23 @@ public final class UserDtos {
     public record MeVO(Long id, String email, boolean verified, String nickname, String avatarUrl, String college,
                        Long campusId, String campusName, String bio, Integer creditScore, String creditLevel,
                        BigDecimal balance, Integer status, LocalDateTime banUntil, Stats stats,
-                       LocalDateTime createdAt) {
+                       LocalDateTime createdAt, boolean emailNotify) {
     }
 
     public record UpdateMeReq(@Size(min = 2, max = 16, message = "昵称 2–16 字") String nickname,
                               @Size(max = 255) String avatarUrl,
                               @Size(max = 64) String college,
                               Long campusId,
-                              @Size(max = 200) String bio) {
+                              @Size(max = 200) String bio,
+                              Boolean emailNotify) {
     }
 
     public record ChangePasswordReq(@NotBlank String oldPassword, @NotBlank String newPassword) {
     }
 
     public record CreditLogVO(Long id, Integer delta, Integer scoreAfter, Integer reasonType, String reasonText,
-                              Long refId, String remark, LocalDateTime createdAt) {
+                              Long refId, String remark, LocalDateTime createdAt,
+                              boolean appealable, Integer appealStatus) {
     }
 
     public record BalanceLogVO(Long id, String amount, BigDecimal balanceAfter, Integer type, Long orderId,
@@ -48,6 +50,7 @@ public final class UserDtos {
 
     public record ProfileVO(Long id, String nickname, String avatarUrl, String college, String campusName, String bio,
                             Integer creditScore, String creditLevel, boolean badge, String goodRate, int reviewCount,
-                            int onSaleCount, int soldCount, boolean blocked, Integer status, LocalDate joinedAt) {
+                            int onSaleCount, int soldCount, boolean blocked, Integer status, LocalDate joinedAt,
+                            boolean followed, int followerCount) {
     }
 }

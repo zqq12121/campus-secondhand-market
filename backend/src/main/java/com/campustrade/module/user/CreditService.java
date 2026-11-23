@@ -26,7 +26,7 @@ public class CreditService {
             CreditReason.TRADE_DONE, "完成交易", CreditReason.GOOD_REVIEW, "收到好评",
             CreditReason.BAD_REVIEW, "收到差评", CreditReason.DEFAULT_CANCEL, "违约取消/爽约",
             CreditReason.DISPUTE_LOST, "纠纷败诉", CreditReason.REPORT_ESTABLISHED, "举报成立",
-            CreditReason.ADMIN_ADJUST, "管理员调整");
+            CreditReason.ADMIN_ADJUST, "管理员调整", CreditReason.APPEAL_PASSED, "申诉通过");
 
     private final UserMapper userMapper;
     private final CreditLogMapper creditLogMapper;

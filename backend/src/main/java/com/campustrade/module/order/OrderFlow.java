@@ -60,6 +60,7 @@ public class OrderFlow {
     private static final Map<String, String[]> TEXTS = Map.ofEntries(
             Map.entry(OrderStateMachine.SELLER_CONFIRM, new String[]{"卖家已确认订单", "卖家已确认订单，请按约定时间地点面交"}),
             Map.entry(OrderStateMachine.COMPLETE, new String[]{"交易已完成", "买家已确认完成，交易结束"}),
+            Map.entry(OrderStateMachine.VERIFY_MEET_CODE, new String[]{"交易已完成", "卖家已核销面交码，交易结束"}),
             Map.entry(OrderStateMachine.AUTO_COMPLETE, new String[]{"交易已完成", "超时未确认，系统自动完成交易"}),
             Map.entry(OrderStateMachine.CANCEL, new String[]{"订单已取消", "订单已取消"}),
             Map.entry(OrderStateMachine.AUTO_CANCEL_UNCONFIRMED, new String[]{"订单已取消", "卖家超时未确认，订单已自动取消"}),
@@ -231,7 +232,7 @@ public class OrderFlow {
                 .setSql("stock = stock + " + o.getQuantity() + ", version = version + 1"));
         goodsMapper.update(new LambdaUpdateWrapper<Goods>().eq(Goods::getId, o.getGoodsId())
                 .eq(Goods::getStatus, GoodsStatus.TRADING).set(Goods::getStatus, GoodsStatus.ON_SALE));
-        stockCache.evictAfterCommit(o.getGoodsId());
+        TxUtil.afterCommit(() -> stockCache.evict(o.getGoodsId()));
     }
 
     private void closePayment(long orderId) {

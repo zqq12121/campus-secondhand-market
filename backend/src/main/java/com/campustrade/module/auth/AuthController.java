@@ -1,6 +1,7 @@
 package com.campustrade.module.auth;
 
 import com.campustrade.common.R;
+import com.campustrade.infra.CaptchaService;
 import com.campustrade.module.auth.AuthDtos.LoginReq;
 import com.campustrade.module.auth.AuthDtos.LoginResp;
 import com.campustrade.module.auth.AuthDtos.RegisterReq;
@@ -11,6 +12,7 @@ import com.campustrade.security.TokenStore;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -23,9 +25,16 @@ public class AuthController {
 
     private final AuthService authService;
     private final TokenStore tokenStore;
+    private final CaptchaService captchaService;
+
+    @GetMapping("/captcha")
+    public R<CaptchaService.Captcha> captcha() {
+        return R.ok(captchaService.create());
+    }
 
     @PostMapping("/email-codes")
     public R<Void> sendCode(@Valid @RequestBody SendCodeReq req, HttpServletRequest http) {
+        captchaService.verify(req.captchaId(), req.captchaCode());
         authService.sendCode(req.email(), req.scene(), http.getRemoteAddr());
         return R.ok();
     }
@@ -37,7 +46,7 @@ public class AuthController {
 
     @PostMapping("/login")
     public R<LoginResp> login(@Valid @RequestBody LoginReq req) {
-        return R.ok(authService.login(req.email(), req.password()));
+        return R.ok(authService.login(req.email(), req.password(), req.captchaId(), req.captchaCode()));
     }
 
     @PostMapping("/logout")

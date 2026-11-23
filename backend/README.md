@@ -2,7 +2,7 @@
 
 Spring Boot 3.5 + MyBatis-Plus + Spring Security（JWT）+ MySQL 8 + Redis + RabbitMQ + WebSocket（STOMP），按 `docs/接口文档.md` 实现。
 
-## 当前进度：V1.2 接口文档全部完成
+## 当前进度：V1.4（P0 / P1 / P2 全部完成）
 
 | 模块 | 接口文档章节 | 状态 |
 | --- | --- | --- |
@@ -25,6 +25,8 @@ Spring Boot 3.5 + MyBatis-Plus + Spring Security（JWT）+ MySQL 8 + Redis + Rab
 | 后台：数据看板（`stat_daily` 每小时汇总，启动时从最后统计日补算到当天） | 13.2 | V1.2 完成 |
 | 后台：内容运营（公告/轮播、公告群发通知、敏感词 Redis 广播热更新） | 13.10 | V1.2 完成 |
 | 后台：系统管理（管理员、角色与权限、操作日志查询） | 13.11 | V1.2 完成 |
+| 下单 Redis 预扣库存；售后 `appeal_remark`；求购响应数 `want_response` | 8.1、9.5、6 | V1.3 完成 |
+| P2：图形验证码、关注卖家、降价提醒、面交核销码、信用分申诉、邮件通知、ES 检索、猜你喜欢 | 14 | V1.4 完成 |
 
 ## 本地运行
 
@@ -60,7 +62,26 @@ Spring Boot 3.5 + MyBatis-Plus + Spring Security（JWT）+ MySQL 8 + Redis + Rab
 cd backend && mvn test
 ```
 
-单元测试不依赖数据库和中间件：订单状态机、下单 Redis 库存预扣、信用等级、敏感词 DFA、敏感词批量导入、求购匹配、「我有」的 `wantId` 校验。
+单元测试不依赖数据库和中间件：订单状态机、面交核销码、信用分申诉、图形验证码与登录门槛、关注上新、降价提醒、猜你喜欢、检索索引同步、下单（幂等、Redis 预扣、乐观锁重试）、支付入账（金额校验、重复通知、关单后到账退款）、售后（申请校验、申请介入、同意退款与渠道失败、介入截止时间）、信用等级、敏感词 DFA、敏感词批量导入、求购匹配、「我有」的 `wantId` 校验、看板补算。
+
+### 已有数据库升级
+
+`sql/schema.sql` 只在 MySQL 首次初始化时执行。已经跑过旧版本的库，按版本执行 `sql/upgrade/` 下的脚本：
+
+```bash
+docker exec -i campus-trade-mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" campus_trade' < sql/upgrade/v1.3.sql
+```
+
+```bash
+docker exec -i campus-trade-mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" campus_trade' < sql/upgrade/v1.4.sql
+```
+
+### 商品搜索引擎
+
+| `SEARCH_ENGINE` | 说明 |
+| --- | --- |
+| `mysql`（默认） | MySQL ngram 全文索引 |
+| `es` | Elasticsearch + smartcn 中文分词。先 `docker compose --profile es up -d` 起 ES（首次会构建镜像），索引不存在时后端自动建索引并全量同步，之后每 30 秒增量同步；ES 出错时自动退回 MySQL |
 
 ### Docker 部署（后端 + 前端）
 
@@ -111,7 +132,7 @@ com.campustrade
 
 - **ID 与金额**：Long 全局序列化为字符串，BigDecimal 序列化为 2 位小数字符串（接口文档 1.5）。
 - **token 失效**：登出时 jti 进 Redis 黑名单；改密码或封禁时写入毫秒级时间点，此前签发的 token 全部失效。
-- **库存**：下单时先 Redis 预扣（`goods:stock:{id}`，Lua 原子判断并扣减，不存在时用库里的库存初始化，TTL 30 分钟），不足直接返回 `5002`；再用 `goods.version` 乐观锁扣库存，冲突重试 3 次，以数据库为准。下单事务回滚、取消/退款回补库存、卖家编辑商品后删除该缓存，下次下单重新从库里加载。库存归 0 时商品进入「交易中」。
+- **库存**：先用 Lua 脚本在 Redis 原子预扣（`goods:stock:{id}`，缓存不存在时从库里加载在售商品的库存），库存不足直接返回，不打数据库；再用 `goods.version` 乐观锁扣库存，冲突重试 3 次，库存归 0 时商品进入「交易中」。下单事务回滚时归还预扣；订单取消/退款回补库存、卖家编辑商品后删除缓存，下次下单重新加载。数据库乐观锁是最终依据，Redis 只做前置过滤，缓存偏差不会导致超卖。
 - **订单状态机**：`OrderStateMachine` 校验「状态 + 动作 + 操作人」，更新时带状态和版本号条件，并写 `order_log`。
 - **超时处理**：RabbitMQ「TTL 队列 + 死信」实现延时消息（每种超时一个队列，队列名带 TTL 并作为路由键，改时长后旧队列不会再收到消息）。消费时重新校验状态和截止时间，过时或重复的消息直接忽略；投递失败或 MQ 不可用时，由每分钟一次的定时扫描兜底。
 - **状态流转**：`OrderFlow` 统一完成状态机校验、乐观锁更新、写 `order_log`、通知对方、在双方会话插入系统消息、投递延时消息。
@@ -121,4 +142,6 @@ com.campustrade
 - **实时推送**：STOMP 简单代理，`/user/queue/messages|notifications|errors`；推送在事务提交后发送，CONNECT 帧用用户端 JWT 鉴权。
 - **审核策略**：敏感词未命中且信用分 ≥ 80 时直接上架，其余转人工审核，每次都写 `audit_record`。
 - **求购匹配**：商品进入在售状态后（自动审核通过或人工审核通过），在事务提交后异步匹配同校、同二级分类、价格落在预算内的进行中求购，排除卖家本人和拉黑了卖家的求购者，单个商品最多通知 100 个求购帖。Redis 记录「求购帖 + 商品」，30 天内不重复通知。
+- **P2 异步通知**：求购匹配、关注上新、降价提醒、邮件副本都在事务提交后用 `CompletableFuture` 异步执行，失败只记日志；Redis 记去重键，避免重复打扰。
+- **检索同步**：不在业务代码里埋点，按 `(updated_at, id)` 游标增量同步；读变更用自定义 SQL，绕过 `@TableLogic` 才能看到已删除的商品并从索引删除。
 - **上传**：V1.0 存本地磁盘（`UPLOAD_DIR`），通过 `/uploads/**` 访问；按文件头校验，只允许 jpg/png/webp。

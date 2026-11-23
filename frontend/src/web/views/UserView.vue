@@ -46,6 +46,15 @@ async function chat() {
   router.push(`/chat/${c.id}`)
 }
 
+async function toggleFollow() {
+  if (!u.value || needLogin()) return
+  if (u.value.followed) await userApi.unfollow(id)
+  else await userApi.follow(id)
+  u.value.followed = !u.value.followed
+  u.value.followerCount += u.value.followed ? 1 : -1
+  ElMessage.success(u.value.followed ? '已关注，TA 发布新商品时会通知你' : '已取消关注')
+}
+
 async function toggleBlock() {
   if (!u.value || needLogin()) return
   if (u.value.blocked) {
@@ -86,9 +95,12 @@ onMounted(async () => {
             <div class="stat"><span class="v" style="font-size: 22px">{{ u.goodRate ? `${u.goodRate}%` : '—' }}</span><span class="l">好评率</span></div>
             <div class="stat"><span class="v" style="font-size: 22px">{{ u.soldCount }}</span><span class="l">成交</span></div>
             <div class="stat"><span class="v" style="font-size: 22px">{{ u.onSaleCount }}</span><span class="l">在售</span></div>
+            <div class="stat"><span class="v" style="font-size: 22px">{{ u.followerCount }}</span><span class="l">粉丝</span></div>
           </div>
           <div class="row">
-            <button class="btn btn-primary" @click="chat"><AppIcon name="message" />私信</button>
+            <button class="btn" :class="u.followed ? 'btn-outline' : 'btn-primary'" :aria-pressed="u.followed" @click="toggleFollow">
+              <AppIcon :name="u.followed ? 'check' : 'plus'" />{{ u.followed ? '已关注' : '关注' }}</button>
+            <button class="btn btn-outline" @click="chat"><AppIcon name="message" />私信</button>
             <button class="btn btn-outline" @click="toggleBlock">{{ u.blocked ? '取消拉黑' : '拉黑' }}</button>
             <button class="btn btn-ghost" aria-label="举报该用户" @click="needLogin() || (reportOpen = true)"><AppIcon name="flag" /></button>
           </div>

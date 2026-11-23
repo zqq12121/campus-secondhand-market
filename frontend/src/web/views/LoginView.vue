@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import AppIcon from '@/shared/components/AppIcon.vue'
+import CaptchaField from '../components/CaptchaField.vue'
 import { ApiError } from '@/shared/request'
 import { authApi } from '../api'
 import { useAuthStore } from '../stores/auth'
@@ -19,9 +20,13 @@ const meta = useMetaStore()
 
 const tab = ref<'login' | 'register' | 'reset'>('login')
 const loading = ref(false)
-const login = reactive({ prefix: '', password: '', error: '' })
-const reg = reactive({ prefix: '', code: '', nickname: '', campusId: '', password: '' })
-const reset = reactive({ prefix: '', code: '', password: '' })
+const login = reactive({ prefix: '', password: '', error: '', needCaptcha: false, captcha: '' })
+const reg = reactive({ prefix: '', code: '', nickname: '', campusId: '', password: '', captcha: '' })
+const reset = reactive({ prefix: '', code: '', password: '', captcha: '' })
+type CaptchaRef = InstanceType<typeof CaptchaField> | null
+const loginCaptcha = ref<CaptchaRef>(null)
+const regCaptcha = ref<CaptchaRef>(null)
+const resetCaptcha = ref<CaptchaRef>(null)
 const countdown = ref(0)
 let timer: number | undefined
 
@@ -41,15 +46,22 @@ function done() {
 
 async function doLogin() {
   if (!login.prefix || !login.password) return (login.error = '请填写邮箱和密码')
+  if (login.needCaptcha && !login.captcha.trim()) return (login.error = '请输入图形验证码')
   loading.value = true
   login.error = ''
+  const usedCaptcha = login.needCaptcha
   try {
-    auth.applyLogin(await authApi.login(email(login.prefix), login.password))
+    auth.applyLogin(await authApi.login(email(login.prefix), login.password,
+      usedCaptcha ? loginCaptcha.value?.captchaId : undefined, usedCaptcha ? login.captcha.trim() : undefined))
     done()
   } catch (e) {
     const err = e as ApiError
-    const d = err.data as { remainingAttempts?: number; retryAfter?: number; banUntil?: string | null } | null
-    if (err.code === 1005 && d?.remainingAttempts != null) login.error = `邮箱或密码错误，还可以再试 ${d.remainingAttempts} 次`
+    const d = err.data as { remainingAttempts?: number; retryAfter?: number; banUntil?: string | null; captchaRequired?: boolean } | null
+    // 连续失败 3 次后要求图形验证码；验证码用一次就作废，失败后换一张
+    if (d?.captchaRequired || err.code === 1014 || err.code === 1015) login.needCaptcha = true
+    if (usedCaptcha) loginCaptcha.value?.refresh()
+    if (err.code === 1015) login.error = '请输入图形验证码'
+    else if (err.code === 1005 && d?.remainingAttempts != null) login.error = `邮箱或密码错误，还可以再试 ${d.remainingAttempts} 次`
     else if (err.code === 1006 && d?.retryAfter) login.error = `失败次数过多，请 ${Math.ceil(d.retryAfter / 60)} 分钟后再试`
     else if (err.code === 1009) login.error = d?.banUntil ? `账号已封禁至 ${d.banUntil}` : '账号已被永久封禁'
     else login.error = err.message
@@ -60,7 +72,15 @@ async function doLogin() {
 
 async function sendCode(prefix: string, scene: 'REGISTER' | 'RESET_PASSWORD') {
   if (!prefix.trim()) return ElMessage.warning('请先填写邮箱')
-  await authApi.sendCode(email(prefix), scene)
+  const form = scene === 'REGISTER' ? reg : reset
+  const captcha = scene === 'REGISTER' ? regCaptcha.value : resetCaptcha.value
+  if (!form.captcha.trim()) return ElMessage.warning('请先填写图形验证码')
+  try {
+    await authApi.sendCode(email(prefix), scene, captcha?.captchaId ?? '', form.captcha.trim())
+  } finally {
+    // 图形验证码校验一次即作废，无论成功与否都换一张
+    captcha?.refresh()
+  }
   ElMessage.success('验证码已发送，5 分钟内有效')
   countdown.value = 60
   clearInterval(timer)
@@ -124,15 +144,20 @@ async function doReset() {
             <div class="suffix"><input id="l-email" v-model="login.prefix" placeholder="邮箱前缀" autocomplete="username" /><span>{{ SUFFIX }}</span></div></div>
           <div class="field"><label for="l-pwd">密码</label>
             <input id="l-pwd" v-model="login.password" class="input" :class="{ 'is-error': login.error }" type="password" placeholder="请输入密码" autocomplete="current-password" />
-            <span v-if="login.error" class="error" role="alert">{{ login.error }}</span></div>
+            <span v-if="login.error && !login.needCaptcha" class="error" role="alert">{{ login.error }}</span></div>
+          <template v-if="login.needCaptcha">
+            <CaptchaField ref="loginCaptcha" v-model="login.captcha" input-id="l-captcha" />
+            <span v-if="login.error" class="error" role="alert">{{ login.error }}</span>
+          </template>
           <button class="btn btn-primary btn-lg btn-block" type="submit" :disabled="loading">{{ loading ? '登录中…' : '登录' }}</button>
-          <p class="subtle" style="text-align: center">连续输错 5 次将锁定 15 分钟</p>
+          <p class="subtle" style="text-align: center">连续输错 3 次需输入图形验证码，5 次将锁定 15 分钟</p>
         </form>
 
         <form v-else-if="tab === 'register'" class="stack mt-24" @submit.prevent="doRegister">
           <div class="field"><label for="r-email">校园邮箱<span class="req">*</span></label>
             <div class="suffix"><input id="r-email" v-model="reg.prefix" placeholder="邮箱前缀" autocomplete="username" /><span>{{ SUFFIX }}</span></div>
             <span class="hint">只支持 {{ SUFFIX }} 邮箱，验证通过即完成学生认证</span></div>
+          <CaptchaField ref="regCaptcha" v-model="reg.captcha" input-id="r-captcha" />
           <div class="field"><label for="r-code">邮箱验证码<span class="req">*</span></label>
             <div class="input-group"><input id="r-code" v-model="reg.code" class="input" placeholder="6 位验证码" maxlength="6" inputmode="numeric" />
               <button class="btn btn-outline" type="button" :disabled="countdown > 0" @click="sendCode(reg.prefix, 'REGISTER')">{{ countdown > 0 ? `${countdown} 秒后重发` : '获取验证码' }}</button></div></div>
@@ -151,6 +176,7 @@ async function doReset() {
         <form v-else class="stack mt-24" @submit.prevent="doReset">
           <div class="field"><label for="f-email">校园邮箱</label>
             <div class="suffix"><input id="f-email" v-model="reset.prefix" placeholder="邮箱前缀" /><span>{{ SUFFIX }}</span></div></div>
+          <CaptchaField ref="resetCaptcha" v-model="reset.captcha" input-id="f-captcha" />
           <div class="field"><label for="f-code">邮箱验证码</label>
             <div class="input-group"><input id="f-code" v-model="reset.code" class="input" placeholder="6 位验证码" maxlength="6" />
               <button class="btn btn-outline" type="button" :disabled="countdown > 0" @click="sendCode(reset.prefix, 'RESET_PASSWORD')">{{ countdown > 0 ? `${countdown} 秒后重发` : '获取验证码' }}</button></div></div>

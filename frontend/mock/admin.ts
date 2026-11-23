@@ -1,7 +1,7 @@
 /** 管理后台 Mock 接口（/api/admin/v1），对应接口文档第 13 章 */
 import { route, type Auth, type Ctx } from './plugin'
 import {
-  addCredit, admins, afterSales, anns, balanceLogs, campusName, categories, convOf, fmt, goods, later, MockError, money,
+  addCredit, admins, afterSales, anns, balanceLogs, campusName, categories, convOf, creditAppeals, creditLogs, CREDIT_REASON, fmt, goods, later, MockError, money,
   msgs, nextId, notify, opLog, opLogs, orderLogs, orders, page, payments, PERMISSIONS, reports, roles, sensitiveWords, userById,
   users, wants, type AfterSaleRow, type OrderRow,
 } from './db'
@@ -285,6 +285,26 @@ export function registerAdminRoutes() {
 
   /* 13.8 举报 */
   const targetTitle = (t: number, id: string) => (t === 1 ? goods.find((g) => g.id === id)?.title : t === 2 ? userById(id)?.nickname : wants.find((w) => w.id === id)?.title) ?? id
+  /* 信用分申诉（P2） */
+  get('/credit-appeals', 'admin', need('user:credit-appeal', ({ query }) => page([...creditAppeals].reverse()
+    .filter((a) => query.status === undefined || a.status === n(query.status))
+    .map((a) => {
+      const u = userById(a.userId)
+      const l = creditLogs.find((c) => c.id === a.creditLogId)
+      return { id: a.id, userId: a.userId, nickname: u?.nickname ?? null, creditScore: u?.creditScore ?? null, creditLogId: a.creditLogId, delta: a.delta,
+        reasonText: l ? CREDIT_REASON[l.reasonType] : null, logRemark: l?.remark ?? null, logCreatedAt: l?.createdAt ?? null, reason: a.reason,
+        status: a.status, reply: a.reply, handlerId: null, handledAt: a.handledAt, createdAt: a.createdAt }
+    }), query)))
+  post('/credit-appeals/:id/handle', 'admin', need('user:credit-appeal', ({ params, body }) => {
+    const a = creditAppeals.find((x) => x.id === params.id && x.status === 0) ?? err(409, '申诉已处理')
+    const reply = String(body.reply ?? '').trim()
+    if (!reply) return err(400, '请填写处理说明')
+    a.status = body.approve ? 1 : 2; a.reply = reply; a.handledAt = fmt()
+    if (body.approve) addCredit(a.userId, -a.delta, 8, a.id, `信用分申诉通过：${reply}`)
+    else notify(a.userId, 5, '信用分申诉未通过', reply)
+    return null
+  }))
+
   get('/reports', 'admin', need('report:handle', ({ query }) => page(reports
     .filter((r) => r.status === (query.status === undefined ? 0 : n(query.status)))
     .filter((r) => !query.targetType || r.targetType === n(query.targetType))

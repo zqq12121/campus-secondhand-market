@@ -30,6 +30,8 @@ export default defineConfig(({ mode }) => {
       proxy: useMock
         ? undefined
         : {
+            // 先匹配：校园二手助手走 Python ai-service
+            '/api/v1/ai': { target: env.VITE_AI_TARGET || 'http://localhost:8090', changeOrigin: true },
             '/api': { target: env.VITE_API_TARGET, changeOrigin: true },
             '/ws': { target: env.VITE_API_TARGET, ws: true, changeOrigin: true },
           },

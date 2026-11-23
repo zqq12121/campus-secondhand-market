@@ -6,9 +6,9 @@ import AppIcon from '@/shared/components/AppIcon.vue'
 import CoverImage from '@/shared/components/CoverImage.vue'
 import UserAvatar from '@/shared/components/UserAvatar.vue'
 import StatusTag from '@/shared/components/StatusTag.vue'
-import { CREDIT_LEVEL, CREDIT_TONE, GOODS_STATUS, GOODS_STATUS_TONE, WANT_STATUS } from '@/shared/enums'
+import { CREDIT_APPEAL_STATUS, CREDIT_LEVEL, CREDIT_TONE, GOODS_STATUS, GOODS_STATUS_TONE, WANT_STATUS } from '@/shared/enums'
 import { priceText, shortTime } from '@/shared/format'
-import type { BalanceLog, BlockedUser, CreditLog, FavoriteItem, MyGoodsItem, WantItem } from '@/shared/types'
+import type { BalanceLog, BlockedUser, CreditLog, FavoriteItem, FollowedUser, MyGoodsItem, WantItem } from '@/shared/types'
 import GoodsCard from '../components/GoodsCard.vue'
 import { USER_TOKEN_KEY } from '../http'
 import { commonApi, goodsApi, userApi, wantApi } from '../api'
@@ -31,13 +31,15 @@ const counts = ref<Record<string, number>>({})
 const favs = ref<FavoriteItem[]>([])
 const wants = ref<WantItem[]>([])
 const blocks = ref<BlockedUser[]>([])
+const follows = ref<FollowedUser[]>([])
 const credits = ref<CreditLog[]>([])
 const balances = ref<BalanceLog[]>([])
 const loading = ref(false)
 
 const profileOpen = ref(false)
 const pwdOpen = ref(false)
-const profile = reactive({ nickname: '', college: '', campusId: '', bio: '', avatarUrl: '' as string | null })
+const profile = reactive({ nickname: '', college: '', campusId: '', bio: '', avatarUrl: '' as string | null, emailNotify: false })
+const appeal = reactive({ open: false, log: null as CreditLog | null, reason: '' })
 const pwd = reactive({ old: '', new: '' })
 
 const me = computed(() => auth.me)
@@ -52,6 +54,7 @@ async function loadTab() {
     if (tab.value === 'fav') favs.value = (await userApi.favorites({ page: 1, size: 50 })).list
     else if (tab.value === 'want') wants.value = (await userApi.myWants({ page: 1, size: 50 })).list
     else if (tab.value === 'block') blocks.value = (await userApi.blocks({ page: 1, size: 50 })).list
+    else if (tab.value === 'follow') follows.value = (await userApi.follows({ page: 1, size: 50 })).list
     else {
       const r = await userApi.myGoods({ status: Number(tab.value), page: 1, size: 50 })
       goods.value = r.list
@@ -85,6 +88,27 @@ async function wantAction(w: WantItem, a: 'close' | 'del') {
   loadTab()
 }
 
+async function unfollow(u: FollowedUser) {
+  await userApi.unfollow(u.userId)
+  ElMessage.success('已取消关注')
+  loadTab()
+}
+
+const loadCredits = () => userApi.creditLogs({ page: 1, size: 5 }).then((r) => (credits.value = r.list))
+
+function openAppeal(c: CreditLog) {
+  Object.assign(appeal, { open: true, log: c, reason: '' })
+}
+
+async function submitAppeal() {
+  if (!appeal.log) return
+  if (!appeal.reason.trim()) return ElMessage.warning('请写明申诉理由')
+  await userApi.appealCredit(appeal.log.id, appeal.reason.trim())
+  appeal.open = false
+  ElMessage.success('申诉已提交，管理员处理后会通知你')
+  loadCredits()
+}
+
 async function unblock(u: BlockedUser) {
   await userApi.unblock(u.userId)
   ElMessage.success('已取消拉黑')
@@ -93,7 +117,7 @@ async function unblock(u: BlockedUser) {
 
 function openProfile() {
   if (!me.value) return
-  Object.assign(profile, { nickname: me.value.nickname, college: me.value.college ?? '', campusId: me.value.campusId, bio: me.value.bio ?? '', avatarUrl: me.value.avatarUrl })
+  Object.assign(profile, { nickname: me.value.nickname, college: me.value.college ?? '', campusId: me.value.campusId, bio: me.value.bio ?? '', avatarUrl: me.value.avatarUrl, emailNotify: me.value.emailNotify })
   profileOpen.value = true
 }
 
@@ -105,7 +129,7 @@ async function pickAvatar(e: Event) {
 
 async function saveProfile() {
   if (profile.nickname.trim().length < 2) return ElMessage.warning('昵称需要 2–16 个字')
-  auth.me = await userApi.updateMe({ nickname: profile.nickname.trim(), college: profile.college.trim(), campusId: profile.campusId, bio: profile.bio.trim(), avatarUrl: profile.avatarUrl })
+  auth.me = await userApi.updateMe({ nickname: profile.nickname.trim(), college: profile.college.trim(), campusId: profile.campusId, bio: profile.bio.trim(), avatarUrl: profile.avatarUrl, emailNotify: profile.emailNotify })
   profileOpen.value = false
   ElMessage.success('资料已保存')
 }
@@ -130,7 +154,7 @@ onMounted(async () => {
   meta.load()
   await auth.fetchMe()
   loadTab()
-  userApi.creditLogs({ page: 1, size: 3 }).then((r) => (credits.value = r.list))
+  loadCredits()
   userApi.balanceLogs({ page: 1, size: 3 }).then((r) => (balances.value = r.list))
 })
 </script>
@@ -143,6 +167,7 @@ onMounted(async () => {
           <RouterLink class="active" to="/me"><AppIcon name="user" />我的主页</RouterLink>
           <RouterLink to="/orders"><AppIcon name="file" />我的订单</RouterLink>
           <RouterLink to="/notifications"><AppIcon name="bell" />消息通知</RouterLink>
+          <RouterLink to="/me/preferences"><AppIcon name="sliders" />助手偏好</RouterLink>
           <button type="button" @click="openProfile"><AppIcon name="edit" />编辑资料</button>
           <button type="button" @click="pwdOpen = true"><AppIcon name="lock" />修改密码</button>
           <button type="button" @click="logout"><AppIcon name="logout" />退出登录</button>
@@ -177,7 +202,9 @@ onMounted(async () => {
               <div class="row" style="align-items: baseline"><span class="num big">{{ me.creditScore }}</span><span class="subtle">/ 100 · {{ nextLevel }}</span></div>
               <div class="credit-bar"><span :style="{ width: `${me.creditScore}%` }" /></div>
               <ul class="logs subtle">
-                <li v-for="c in credits" :key="c.id">{{ shortTime(c.createdAt) }} {{ c.reasonText }} <span :class="c.delta > 0 ? 'up' : 'down'">{{ c.delta > 0 ? '+' : '−' }}{{ Math.abs(c.delta) }}</span></li>
+                <li v-for="c in credits" :key="c.id">{{ shortTime(c.createdAt) }} {{ c.reasonText }} <span :class="c.delta > 0 ? 'up' : 'down'">{{ c.delta > 0 ? '+' : '−' }}{{ Math.abs(c.delta) }}</span>
+                  <button v-if="c.appealable" type="button" class="link-btn" @click="openAppeal(c)">申诉</button>
+                  <span v-else-if="c.appealStatus != null" class="appeal-tag">{{ CREDIT_APPEAL_STATUS[c.appealStatus] }}</span></li>
                 <li v-if="!credits.length">暂无变动</li>
               </ul>
             </section>
@@ -196,6 +223,7 @@ onMounted(async () => {
               <button v-for="t in GOODS_TABS" :key="t.key" class="tab" :class="{ active: tab === t.key }" role="tab" @click="setTab(t.key)">{{ t.label }}<span v-if="counts[t.key]" class="count">{{ counts[t.key] }}</span></button>
               <button class="tab" :class="{ active: tab === 'fav' }" role="tab" @click="setTab('fav')">我的收藏</button>
               <button class="tab" :class="{ active: tab === 'want' }" role="tab" @click="setTab('want')">我的求购</button>
+              <button class="tab" :class="{ active: tab === 'follow' }" role="tab" @click="setTab('follow')">我的关注</button>
               <button class="tab" :class="{ active: tab === 'block' }" role="tab" @click="setTab('block')">黑名单</button>
             </div>
             <div v-loading="loading" style="min-height: 120px">
@@ -205,7 +233,7 @@ onMounted(async () => {
               </template>
               <template v-else-if="tab === 'want'">
                 <div v-for="w in wants" :key="w.id" class="list-item">
-                  <div style="flex: 1; min-width: 0">{{ w.title }}<div class="subtle">{{ w.categoryName }} · {{ shortTime(w.createdAt) }} 发布 · {{ shortTime(w.expireAt) }} 到期</div></div>
+                  <div style="flex: 1; min-width: 0">{{ w.title }}<div class="subtle">{{ w.categoryName }} · {{ shortTime(w.createdAt) }} 发布 · {{ shortTime(w.expireAt) }} 到期 · {{ w.responseCount ?? 0 }} 人响应</div></div>
                   <span class="tag" :class="w.status === 0 ? 'tag-green' : ''">{{ WANT_STATUS[w.status] }}</span>
                   <div class="ops">
                     <button v-if="w.status === 0" class="btn btn-primary btn-sm" @click="wantAction(w, 'close')">已解决</button>
@@ -213,6 +241,15 @@ onMounted(async () => {
                   </div>
                 </div>
                 <div v-if="!wants.length" class="empty">还没有发布求购。<RouterLink to="/wants" class="link">去求购广场</RouterLink></div>
+              </template>
+              <template v-else-if="tab === 'follow'">
+                <div v-for="u in follows" :key="u.userId" class="list-item">
+                  <RouterLink :to="`/users/${u.userId}`"><UserAvatar :name="u.nickname" :src="u.avatarUrl" /></RouterLink>
+                  <div style="flex: 1; min-width: 0"><RouterLink :to="`/users/${u.userId}`">{{ u.nickname }}</RouterLink>
+                    <div class="subtle">{{ CREDIT_LEVEL[u.creditLevel] }} · 在售 {{ u.onSaleCount }} · {{ shortTime(u.followedAt) }} 关注</div></div>
+                  <button class="btn btn-outline btn-sm" @click="unfollow(u)">取消关注</button>
+                </div>
+                <div v-if="!follows.length" class="empty">还没有关注卖家，在卖家主页点「关注」，TA 上新时会通知你</div>
               </template>
               <template v-else-if="tab === 'block'">
                 <div v-for="u in blocks" :key="u.userId" class="list-item">
@@ -256,8 +293,20 @@ onMounted(async () => {
           <button v-for="c in meta.campuses" :key="c.id" type="button" class="radio-card" :class="{ active: profile.campusId === c.id }" @click="profile.campusId = c.id">{{ c.name }}</button></div></div>
         <div class="field"><label for="pf-b">个人简介</label><el-input id="pf-b" v-model="profile.bio" type="textarea" :rows="3" maxlength="200" show-word-limit /></div>
         <div class="field"><label for="pf-e">校园邮箱</label><el-input id="pf-e" :model-value="me?.email" disabled /><span class="hint">邮箱即账号，不可修改</span></div>
+        <div class="field"><label for="pf-m">邮件通知</label>
+          <div class="row"><el-switch id="pf-m" v-model="profile.emailNotify" /><span class="hint">开启后，订单、审核、举报结果、信用分通知会同时发到校园邮箱</span></div></div>
       </div>
       <template #footer><el-button @click="profileOpen = false">取消</el-button><el-button type="primary" @click="saveProfile">保存</el-button></template>
+    </el-dialog>
+
+    <el-dialog v-model="appeal.open" title="信用分申诉" width="min(480px, 92vw)">
+      <div v-if="appeal.log" class="stack">
+        <p class="muted">{{ shortTime(appeal.log.createdAt) }} {{ appeal.log.reasonText }}，扣 {{ Math.abs(appeal.log.delta) }} 分<template v-if="appeal.log.remark">（{{ appeal.log.remark }}）</template></p>
+        <div class="field"><label for="ap-r">申诉理由<span class="req">*</span></label>
+          <el-input id="ap-r" v-model="appeal.reason" type="textarea" :rows="4" maxlength="500" show-word-limit placeholder="说明为什么这次扣分不合理，可以附上订单号、聊天记录等" /></div>
+        <p class="hint">每条扣分记录只能申诉一次。管理员审核通过后，扣掉的分会加回来。</p>
+      </div>
+      <template #footer><el-button @click="appeal.open = false">取消</el-button><el-button type="primary" @click="submitAppeal">提交申诉</el-button></template>
     </el-dialog>
 
     <el-dialog v-model="pwdOpen" title="修改密码" width="min(420px, 92vw)">
@@ -285,5 +334,7 @@ onMounted(async () => {
 .item-thumb { overflow: hidden; }
 .ops { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .link { color: var(--primary); }
+.link-btn { border: 0; background: none; padding: 0 0 0 6px; color: var(--primary); cursor: pointer; font: inherit; }
+.appeal-tag { padding-left: 6px; color: var(--text-2); }
 @media (max-width: 768px) { .quick-stats { grid-template-columns: repeat(2, 1fr); } .list-item { flex-wrap: wrap; } }
 </style>

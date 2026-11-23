@@ -48,6 +48,7 @@ export const creditLevel = (s: number) => (s >= 90 ? 'EXCELLENT' : s >= 80 ? 'GO
 export interface UserRow {
   id: string; email: string; password: string; nickname: string; avatarUrl: string | null; college: string | null
   campusId: string; bio: string | null; creditScore: number; balance: number; status: number; banUntil: string | null; createdAt: string
+  emailNotify?: boolean
 }
 const u = (id: string, email: string, nickname: string, campusId: string, creditScore: number, college: string, bio: string | null = null): UserRow => ({
   id, email, password: 'abc12345', nickname, avatarUrl: null, college, campusId, bio, creditScore, balance: 0, status: 0, banUntil: null, createdAt: ago(60 * 24 * 300),
@@ -69,13 +70,17 @@ export const maskEmail = (e: string) => e.slice(0, 2) + '***' + e.slice(e.indexO
 
 export const blocks: { userId: string; blockedUserId: string; createdAt: string }[] = []
 export const isBlocked = (by: string, target: string) => blocks.some((b) => b.userId === by && b.blockedUserId === target)
+/** 关注卖家（P2） */
+export const follows: { userId: string; followeeId: string; createdAt: string }[] = [{ userId: '1001', followeeId: '1002', createdAt: ago(60 * 24 * 5) }]
+/** 信用分申诉（P2）：status 0 待处理 1 通过 2 驳回 */
+export const creditAppeals: { id: string; userId: string; creditLogId: string; delta: number; reason: string; status: number; reply: string | null; handledAt: string | null; createdAt: string }[] = []
 
 export const creditLogs: { id: string; userId: string; delta: number; scoreAfter: number; reasonType: number; refId: string | null; remark: string | null; createdAt: string }[] = [
   { id: '1', userId: '1001', delta: -3, scoreAfter: 84, reasonType: 4, refId: null, remark: '约好面交未到', createdAt: ago(60 * 24 * 20) },
   { id: '2', userId: '1001', delta: 1, scoreAfter: 85, reasonType: 1, refId: null, remark: null, createdAt: ago(60 * 24 * 3) },
   { id: '3', userId: '1001', delta: 1, scoreAfter: 86, reasonType: 2, refId: null, remark: null, createdAt: ago(60 * 24) },
 ]
-export const CREDIT_REASON: Record<number, string> = { 1: '完成交易', 2: '收到好评', 3: '收到差评', 4: '违约取消/爽约', 5: '纠纷败诉', 6: '举报成立', 7: '管理员调整' }
+export const CREDIT_REASON: Record<number, string> = { 1: '完成交易', 2: '收到好评', 3: '收到差评', 4: '违约取消/爽约', 5: '纠纷败诉', 6: '举报成立', 7: '管理员调整', 8: '申诉通过' }
 export function addCredit(userId: string, delta: number, reasonType: number, refId: string | null = null, remark: string | null = null) {
   const x = userById(userId)!
   x.creditScore = Math.max(0, Math.min(100, x.creditScore + delta))
@@ -153,6 +158,8 @@ export const wants: WantRow[] = [
   { id: '703', userId: '1004', campusId: '2', categoryId: '501', title: '求购一辆二手电动车，能骑就行', description: '两个校区间通勤用，续航 30km 以上。', priceMin: 500, priceMax: 1200, status: 0, expireAt: later(60 * 24 * 13), createdAt: ago(800), deleted: false },
   { id: '704', userId: '1001', campusId: '1', categoryId: '301', title: '收一个宿舍用小冰箱', description: '50L 以内，静音。', priceMin: 100, priceMax: 250, status: 0, expireAt: later(60 * 24 * 4), createdAt: ago(1500), deleted: false },
 ]
+/** 求购响应（「我有」），同一用户对同一求购只记一次 */
+export const wantResponses: { wantId: string; responderId: string }[] = [{ wantId: '704', responderId: '1002' }]
 
 /* ---------------- 聊天 ---------------- */
 export interface ConvRow { id: string; small: string; big: string; goodsId: string | null; lastMessage: string | null; lastMessageAt: string | null; smallUnread: number; bigUnread: number }
@@ -183,6 +190,8 @@ export interface OrderRow {
   unitPrice: number; quantity: number; totalAmount: number; tradeMode: number; status: number
   cancelReason: string | null; cancelBy: number | null; sellerConfirmedAt: string | null; paidAt: string | null
   deliveredAt: string | null; finishedAt: string | null; canceledAt: string | null; reviewDeadline: string | null; createdAt: string
+  /** 面交核销码（P2）：卖家确认时生成 */
+  meetCode?: string | null
   /** 进入售后前的状态，撤销/拒绝后恢复 */
   beforeAfterSale?: number
 }
@@ -273,7 +282,7 @@ export const anns: AnnRow[] = [
 /* ---------------- 后台 ---------------- */
 export const PERMISSIONS = [
   ['dashboard:view', '数据看板', '总览'], ['goods:audit', '商品审核', '商品'], ['goods:manage', '商品管理', '商品'],
-  ['user:view', '用户查看', '用户'], ['user:punish', '禁言/封禁', '用户'], ['user:credit', '调整信用分', '用户'],
+  ['user:view', '用户查看', '用户'], ['user:punish', '禁言/封禁', '用户'], ['user:credit', '调整信用分', '用户'], ['user:credit-appeal', '信用分申诉处理', '用户'],
   ['order:view', '订单查询', '交易'], ['dispute:handle', '纠纷裁决', '交易'], ['report:handle', '举报处理', '交易'],
   ['category:manage', '分类管理', '运营'], ['content:manage', '公告/轮播/敏感词', '运营'],
   ['system:admin', '管理员账号', '系统'], ['system:role', '角色与权限', '系统'], ['system:log', '操作日志', '系统'],
