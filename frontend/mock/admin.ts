@@ -1,8 +1,8 @@
 /** 管理后台 Mock 接口（/api/admin/v1），对应接口文档第 13 章 */
 import { route, type Auth, type Ctx } from './plugin'
 import {
-  addCredit, admins, afterSales, anns, balanceLogs, campusName, categories, convOf, creditAppeals, creditLogs, CREDIT_REASON, fmt, goods, later, MockError, money,
-  msgs, nextId, notify, opLog, opLogs, orderLogs, orders, page, payments, PERMISSIONS, reports, roles, sensitiveWords, userById,
+  addCredit, admins, afterSales, anns, balanceLogs, campusName, categories, convOf, creditAppeals, creditLevel, creditLogs, CREDIT_REASON, fmt, goods, later,
+  MockError, money, msgs, nextId, notify, opLog, opLogs, orderLogs, orders, page, payments, PERMISSIONS, reports, reviews, roles, sensitiveWords, userById,
   users, wants, type AfterSaleRow, type OrderRow,
 } from './db'
 
@@ -33,13 +33,27 @@ function asOut(a: AfterSaleRow) {
   return { id: a.id, orderId: a.orderId, type: a.type, reason: a.reason, evidenceUrls: a.evidenceUrls, refundAmount: money(a.refundAmount), status: a.status,
     sellerReply: a.sellerReply, sellerDeadline: a.sellerDeadline, arbitrationReason: a.arbitrationReason, refundedAt: a.refundedAt, closedAt: a.closedAt, actions: [], createdAt: a.createdAt }
 }
+/** 与后端一致：order 同用户端订单详情（myRole=ADMIN，无可执行动作），afterSales 为全部售后 */
 function orderDetailOut(o: OrderRow) {
   const p = [...payments].reverse().find((x) => x.orderId === o.id)
+  const g = goods.find((x) => x.id === o.goodsId)
+  const brief = (id: string) => { const u = userById(id)!; return { id: u.id, nickname: u.nickname, avatarUrl: u.avatarUrl } }
+  const list = afterSales.filter((a) => a.orderId === o.id)
   return {
-    ...adminOrderOut(o), quantity: o.quantity, unitPrice: money(o.unitPrice), cancelReason: o.cancelReason,
-    payment: p ? { outTradeNo: p.outTradeNo, status: p.status, amount: money(p.amount), paidAt: p.paidAt } : null,
-    logs: orderLogs.filter((l) => l.orderId === o.id).map(({ orderId: _o, operatorId: _i, ...l }) => l),
-    afterSales: afterSales.filter((a) => a.orderId === o.id).map(asOut),
+    order: {
+      id: o.id, orderNo: o.orderNo, myRole: 'ADMIN',
+      goods: { id: o.goodsId, title: o.goodsTitle, cover: o.goodsCover, unitPrice: money(o.unitPrice), location: g?.location ?? null, campusName: campusName(g?.campusId ?? '1') },
+      quantity: o.quantity, totalAmount: money(o.totalAmount), tradeMode: o.tradeMode, status: o.status,
+      buyer: brief(o.buyerId), seller: brief(o.sellerId), conversationId: convOf(o.buyerId, o.sellerId)?.id ?? null,
+      timeline: { createdAt: o.createdAt, sellerConfirmedAt: o.sellerConfirmedAt, paidAt: o.paidAt, deliveredAt: o.deliveredAt, finishedAt: o.finishedAt, canceledAt: o.canceledAt },
+      deadline: null, cancelReason: o.cancelReason, cancelBy: o.cancelBy,
+      payment: p ? { status: p.status, amount: money(p.amount), paidAt: p.paidAt } : null,
+      afterSale: list.length ? asOut(list[list.length - 1]) : null,
+      review: { deadline: o.reviewDeadline, mine: null, theirs: null }, actions: [],
+      logs: orderLogs.filter((l) => l.orderId === o.id).map(({ orderId: _o, operatorId: _i, ...l }) => l),
+      meetCode: null,
+    },
+    afterSales: list.map(asOut),
   }
 }
 function forceOff(goodsId: string, reason: string, aid: string) {
@@ -162,11 +176,12 @@ export function registerAdminRoutes() {
     }
     return { success, failed }
   }))
-  get('/audit/goods/:id/records', 'admin', need('goods:audit', ({ params }) => {
-    const g = goods.find((x) => x.id === params.id)
+  const recordsOf = (goodsId: string) => {
+    const g = goods.find((x) => x.id === goodsId)
     const sys = g ? [{ id: '0', auditorType: 1, auditorName: null, result: g.hitWords.length ? 3 : 1, reason: null, hitWords: g.hitWords.join('、') || null, createdAt: g.createdAt }] : []
-    return [...sys, ...auditRecords.filter((r) => r.goodsId === params.id).map((r, i) => ({ id: String(i + 1), ...r }))]
-  }))
+    return [...sys, ...auditRecords.filter((r) => r.goodsId === goodsId).map((r, i) => ({ id: String(i + 1), ...r }))]
+  }
+  get('/audit/goods/:id/records', 'admin', need('goods:audit', ({ params }) => recordsOf(params.id)))
 
   /* 13.4 商品管理 */
   get('/goods', 'admin', need('goods:manage', ({ query }) => {
@@ -176,6 +191,22 @@ export function registerAdminRoutes() {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map((g) => ({ id: g.id, title: g.title, coverUrl: g.images[0], price: money(g.price), status: g.status, categoryName: catName(g.categoryId), campusName: campusName(g.campusId),
         seller: { id: g.sellerId, nickname: userById(g.sellerId)!.nickname }, auditRemark: g.auditRemark, reportCount: reports.filter((r) => r.targetType === 1 && r.targetId === g.id).length, createdAt: g.createdAt })), query)
+  }))
+  get('/goods/:id', 'admin', need('goods:manage', ({ params }) => {
+    const g = goods.find((x) => x.id === params.id && !x.deleted) ?? err(2001, '商品不存在')
+    const cat = categories.find((c) => c.id === g.categoryId)
+    const seller = userById(g.sellerId)!
+    return {
+      goods: {
+        id: g.id, title: g.title, description: g.description, coverUrl: g.images[0], images: g.images, categoryId: g.categoryId,
+        categoryPath: [catName(cat?.parentId ?? ''), cat?.name ?? ''].filter(Boolean), categoryName: cat?.name ?? null, price: money(g.price), conditionLevel: g.conditionLevel, tradeMode: g.tradeMode,
+        campusName: campusName(g.campusId), location: g.location, stock: g.stock, status: g.status, auditRemark: g.auditRemark, viewCount: g.viewCount,
+        favoriteCount: g.favoriteCount, reportCount: reports.filter((r) => r.targetType === 1 && r.targetId === g.id).length, seller: { id: seller.id, nickname: seller.nickname, creditScore: seller.creditScore }, hitWords: g.hitWords,
+        submittedAt: g.createdAt, publishedAt: g.publishedAt, createdAt: g.createdAt,
+      },
+      auditRecords: recordsOf(g.id),
+      orderCount: orders.filter((o) => o.goodsId === g.id).length,
+    }
   }))
   post('/goods/:id/force-off', 'admin', need('goods:manage', ({ aid, params, body }) => {
     if (!body.reason) return err(400, '请填写原因')
@@ -195,6 +226,26 @@ export function registerAdminRoutes() {
         onSaleCount: goods.filter((g) => g.sellerId === u.id && g.status === 2).length, soldCount: orders.filter((o) => o.sellerId === u.id && o.status === 70).length,
         boughtCount: orders.filter((o) => o.buyerId === u.id && o.status === 70).length, reportedCount: reports.filter((r) => r.targetType === 2 && r.targetId === u.id).length, createdAt: u.createdAt })), query)
   }))
+  get('/users/:id', 'admin', need('user:view', ({ params }) => {
+    const u = userById(params.id) ?? err(404, '用户不存在')
+    const got = reviews.filter((r) => r.revieweeId === u.id && r.visible)
+    return {
+      user: { id: u.id, email: u.email, nickname: u.nickname, avatarUrl: u.avatarUrl, college: u.college, campusName: campusName(u.campusId), creditScore: u.creditScore,
+        creditLevel: creditLevel(u.creditScore), balance: money(u.balance), status: u.status, banUntil: u.banUntil, lastLoginAt: null, createdAt: u.createdAt,
+        onSaleCount: goods.filter((g) => g.sellerId === u.id && g.status === 2).length, soldCount: orders.filter((o) => o.sellerId === u.id && o.status === 70).length,
+        boughtCount: orders.filter((o) => o.buyerId === u.id && o.status === 70).length, reportedCount: reports.filter((r) => r.targetType === 2 && r.targetId === u.id).length },
+      bio: u.bio,
+      stats: {
+        onSaleCount: goods.filter((g) => g.sellerId === u.id && g.status === 2).length,
+        soldCount: orders.filter((o) => o.sellerId === u.id && o.status === 70).length,
+        boughtCount: orders.filter((o) => o.buyerId === u.id && o.status === 70).length,
+        activeOrderCount: orders.filter((o) => (o.buyerId === u.id || o.sellerId === u.id) && o.status < 70).length,
+        goodRate: got.length ? (got.filter((r) => r.rating === 1).length * 100 / got.length).toFixed(1) : null,
+      },
+    }
+  }))
+  get('/users/:id/credit-logs', 'admin', need('user:view', ({ params, query }) => page(creditLogs.filter((c) => c.userId === params.id).reverse()
+    .map(({ userId: _u, ...c }) => ({ ...c, reasonText: CREDIT_REASON[c.reasonType], appealable: false, appealStatus: null })), query)))
   post('/users/:id/mute', 'admin', need('user:punish', ({ aid, params, body }) => { punishUser(params.id, 1, body.days ?? null, body.reason, aid); return null }))
   post('/users/:id/ban', 'admin', need('user:punish', ({ aid, params, body }) => { punishUser(params.id, 2, body.days ?? null, body.reason, aid); return null }))
   post('/users/:id/unban', 'admin', need('user:punish', ({ aid, params }) => {
@@ -228,9 +279,8 @@ export function registerAdminRoutes() {
     const st = query.status === undefined ? 3 : n(query.status)
     return page(afterSales.filter((a) => a.status === st).map((a) => {
       const o = orders.find((x) => x.id === a.orderId)!
-      const appeal = orderLogs.find((l) => l.orderId === o.id && l.action === 'APPEAL')
-      return { id: a.id, orderId: o.id, orderNo: o.orderNo, goodsTitle: o.goodsTitle, refundAmount: money(a.refundAmount), reason: a.reason, status: a.status,
-        buyer: { id: o.buyerId, nickname: userById(o.buyerId)!.nickname }, seller: { id: o.sellerId, nickname: userById(o.sellerId)!.nickname }, appealedAt: appeal?.createdAt ?? a.createdAt }
+      const appeal = orderLogs.filter((l) => l.orderId === o.id && l.action === 'APPEAL' && l.createdAt >= a.createdAt).pop()
+      return { afterSale: asOut(a), order: adminOrderOut(o), appealedAt: appeal?.createdAt ?? null }
     }), query)
   }))
   const disputeMsgs = (a: AfterSaleRow, beforeId?: string, size = 50) => {
@@ -305,13 +355,28 @@ export function registerAdminRoutes() {
     return null
   }))
 
+  const reportOut = (r: (typeof reports)[number]) => ({ id: r.id, reporter: { id: r.reporterId, nickname: userById(r.reporterId)!.nickname }, targetType: r.targetType,
+    targetId: r.targetId, targetTitle: targetTitle(r.targetType, r.targetId), reasonType: r.reasonType, description: r.description, evidenceUrls: r.evidenceUrls,
+    status: r.status, result: r.result, targetReportCount: reports.filter((x) => x.targetType === r.targetType && x.targetId === r.targetId).length, createdAt: r.createdAt })
   get('/reports', 'admin', need('report:handle', ({ query }) => page(reports
     .filter((r) => r.status === (query.status === undefined ? 0 : n(query.status)))
     .filter((r) => !query.targetType || r.targetType === n(query.targetType))
     .filter((r) => !query.reasonType || r.reasonType === n(query.reasonType))
-    .map((r) => ({ id: r.id, reporter: { id: r.reporterId, nickname: userById(r.reporterId)!.nickname }, targetType: r.targetType, targetId: r.targetId,
-      targetTitle: targetTitle(r.targetType, r.targetId), reasonType: r.reasonType, description: r.description, evidenceUrls: r.evidenceUrls, status: r.status, result: r.result,
-      targetReportCount: reports.filter((x) => x.targetType === r.targetType && x.targetId === r.targetId).length, createdAt: r.createdAt })), query)))
+    .map(reportOut), query)))
+  get('/reports/:id', 'admin', need('report:handle', ({ params }) => {
+    const r = reports.find((x) => x.id === params.id) ?? err(404, '举报不存在')
+    const gd = r.targetType === 1 ? goods.find((g) => g.id === r.targetId && !g.deleted) : undefined
+    const wt = r.targetType === 3 ? wants.find((w) => w.id === r.targetId && !w.deleted) : undefined
+    const owner = userById(gd?.sellerId ?? wt?.userId ?? (r.targetType === 2 ? r.targetId : ''))
+    return {
+      report: reportOut(r),
+      target: {
+        exists: !!owner, title: targetTitle(r.targetType, r.targetId), description: gd?.description ?? wt?.description ?? null,
+        coverUrl: gd?.images[0] ?? (r.targetType === 2 ? owner?.avatarUrl ?? null : null), status: gd?.status ?? wt?.status ?? null,
+        ownerId: owner?.id ?? null, ownerNickname: owner?.nickname ?? null, ownerCreditScore: owner?.creditScore ?? null, ownerStatus: owner?.status ?? null,
+      },
+    }
+  }))
   post('/reports/:id/handle', 'admin', need('report:handle', ({ aid, params, body }) => {
     const r = reports.find((x) => x.id === params.id && x.status === 0) ?? err(409, '状态已变更，请刷新')
     if (!body.result) return err(400, '请填写处理说明')
@@ -341,6 +406,12 @@ export function registerAdminRoutes() {
     categories.push({ id, parentId: body.parentId, name: body.name, iconUrl: body.iconUrl ?? null, sort: body.sort ?? 0, enabled: true })
     opLog(aid, '分类管理', `新增分类：${body.name}`, id)
     return { id }
+  }))
+  // 要在 /categories/:id 之前注册，否则 sort 会被当成 id
+  put('/categories/sort', 'admin', need('category:manage', ({ aid, body }) => {
+    for (const it of body as { id: string; sort: number }[]) { const c = categories.find((x) => x.id === it.id); if (c) c.sort = it.sort }
+    opLog(aid, '分类管理', '批量排序', null)
+    return null
   }))
   put('/categories/:id', 'admin', need('category:manage', ({ aid, params, body }) => {
     const c = categories.find((x) => x.id === params.id) ?? err(404, '分类不存在')

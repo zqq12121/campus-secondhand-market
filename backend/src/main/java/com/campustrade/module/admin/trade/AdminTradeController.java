@@ -85,7 +85,8 @@ public class AdminTradeController {
     public record AdminOrderDetail(DetailVO order, List<AfterSaleVO> afterSales) {
     }
 
-    public record DisputeItem(AfterSaleVO afterSale, AdminOrderVO order) {
+    /** appealedAt：买家申请平台介入的时间（取该售后发起后最近一次「申请介入」日志） */
+    public record DisputeItem(AfterSaleVO afterSale, AdminOrderVO order, LocalDateTime appealedAt) {
     }
 
     public record DisputeDetail(AfterSaleVO afterSale, AdminOrderDetail order, String buyerAppealRemark,
@@ -131,8 +132,14 @@ public class AdminTradeController {
         Map<Long, AdminOrderVO> orders = orderIds.isEmpty() ? Map.of()
                 : toVOs(orderMapper.selectByIds(orderIds)).stream()
                 .collect(java.util.stream.Collectors.toMap(AdminOrderVO::id, v -> v));
+        Map<Long, List<OrderLog>> appeals = orderIds.isEmpty() ? Map.of()
+                : logMapper.selectList(new LambdaQueryWrapper<OrderLog>().in(OrderLog::getOrderId, orderIds)
+                        .eq(OrderLog::getAction, OrderStateMachine.APPEAL)).stream()
+                .collect(java.util.stream.Collectors.groupingBy(OrderLog::getOrderId));
         return R.ok(PageResult.of(page, a -> new DisputeItem(afterSaleService.toVO(a, Operator.ADMIN),
-                orders.get(a.getOrderId()))));
+                orders.get(a.getOrderId()), appeals.getOrDefault(a.getOrderId(), List.of()).stream()
+                .map(OrderLog::getCreatedAt).filter(t -> !t.isBefore(a.getCreatedAt()))
+                .max(LocalDateTime::compareTo).orElse(null))));
     }
 
     @GetMapping("/disputes/{id}")

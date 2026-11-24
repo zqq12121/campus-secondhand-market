@@ -1,6 +1,8 @@
 package com.campustrade.module.admin.user;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.campustrade.common.Biz;
@@ -8,6 +10,7 @@ import com.campustrade.common.Consts.CreditReason;
 import com.campustrade.common.Consts.GoodsStatus;
 import com.campustrade.common.Consts.NotifyType;
 import com.campustrade.common.Consts.OrderStatus;
+import com.campustrade.common.Consts.ReportTarget;
 import com.campustrade.common.Consts.UserStatus;
 import com.campustrade.common.CreditLevel;
 import com.campustrade.common.ErrorCode;
@@ -19,6 +22,8 @@ import com.campustrade.module.goods.mapper.GoodsMapper;
 import com.campustrade.module.notification.NotificationService;
 import com.campustrade.module.order.entity.TradeOrder;
 import com.campustrade.module.order.mapper.TradeOrderMapper;
+import com.campustrade.module.report.entity.Report;
+import com.campustrade.module.report.mapper.ReportMapper;
 import com.campustrade.module.user.CreditService;
 import com.campustrade.module.user.UserDtos.CreditLogVO;
 import com.campustrade.module.user.UserService;
@@ -34,6 +39,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /** 后台用户管理：查询、禁言、封禁、解封、调整信用分（接口文档 13.5） */
@@ -44,6 +51,7 @@ public class AdminUserService {
     private final UserMapper userMapper;
     private final GoodsMapper goodsMapper;
     private final TradeOrderMapper orderMapper;
+    private final ReportMapper reportMapper;
     private final UserService userService;
     private final CreditService creditService;
     private final CommonService commonService;
@@ -63,7 +71,8 @@ public class AdminUserService {
     public record AdminUserVO(Long id, String email, String nickname, String avatarUrl, String college,
                               String campusName, Integer creditScore, String creditLevel, BigDecimal balance,
                               Integer status, LocalDateTime banUntil, LocalDateTime lastLoginAt,
-                              LocalDateTime createdAt) {
+                              LocalDateTime createdAt, int onSaleCount, int soldCount, int boughtCount,
+                              int reportedCount) {
     }
 
     public record TradeStats(int onSaleCount, int soldCount, int boughtCount, int activeOrderCount,
@@ -83,8 +92,7 @@ public class AdminUserService {
                 .le(q.getCreditMax() != null, User::getCreditScore, q.getCreditMax())
                 .orderByDesc(User::getId);
         Page<User> page = userMapper.selectPage(q.toPage(), w);
-        Map<Long, String> campus = commonService.campusNames();
-        return PageResult.of(page, u -> toVO(u, campus));
+        return PageResult.of(page, toVOs(page.getRecords()));
     }
 
     public AdminUserDetail detail(long id) {
@@ -95,7 +103,7 @@ public class AdminUserService {
                 .and(x -> x.eq(TradeOrder::getBuyerId, id).or().eq(TradeOrder::getSellerId, id))
                 .lt(TradeOrder::getStatus, OrderStatus.FINISHED)).intValue();
         TradeStats stats = new TradeStats(userService.onSaleCount(id), sold, bought, active, userService.goodRate(id));
-        return new AdminUserDetail(toVO(u, commonService.campusNames()), u.getBio(), stats);
+        return new AdminUserDetail(toVOs(List.of(u)).getFirst(), u.getBio(), stats);
     }
 
     public PageResult<CreditLogVO> creditLogs(long id, PageQuery pq) {
@@ -153,9 +161,34 @@ public class AdminUserService {
                 .eq(TradeOrder::getStatus, status)).intValue();
     }
 
-    private static AdminUserVO toVO(User u, Map<Long, String> campus) {
-        return new AdminUserVO(u.getId(), u.getEmail(), u.getNickname(), u.getAvatarUrl(), u.getCollege(),
-                campus.get(u.getCampusId()), u.getCreditScore(), CreditLevel.of(u.getCreditScore()).name(),
-                u.getBalance(), u.getStatus(), u.getBanUntil(), u.getLastLoginAt(), u.getCreatedAt());
+    /** 列表里的在售 / 卖出 / 买入 / 被举报次数按本页用户分组统计，不逐个查询 */
+    private List<AdminUserVO> toVOs(List<User> users) {
+        if (users.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, String> campus = commonService.campusNames();
+        List<Long> ids = users.stream().map(User::getId).toList();
+        Map<Long, Integer> onSale = countBy(goodsMapper, new QueryWrapper<Goods>()
+                .eq("status", GoodsStatus.ON_SALE), "seller_id", ids);
+        Map<Long, Integer> sold = countBy(orderMapper, new QueryWrapper<TradeOrder>()
+                .eq("status", OrderStatus.FINISHED), "seller_id", ids);
+        Map<Long, Integer> bought = countBy(orderMapper, new QueryWrapper<TradeOrder>()
+                .eq("status", OrderStatus.FINISHED), "buyer_id", ids);
+        Map<Long, Integer> reported = countBy(reportMapper, new QueryWrapper<Report>()
+                .eq("target_type", ReportTarget.USER), "target_id", ids);
+        return users.stream().map(u -> new AdminUserVO(u.getId(), u.getEmail(), u.getNickname(), u.getAvatarUrl(),
+                u.getCollege(), campus.get(u.getCampusId()), u.getCreditScore(),
+                CreditLevel.of(u.getCreditScore()).name(), u.getBalance(), u.getStatus(), u.getBanUntil(),
+                u.getLastLoginAt(), u.getCreatedAt(), onSale.getOrDefault(u.getId(), 0),
+                sold.getOrDefault(u.getId(), 0), bought.getOrDefault(u.getId(), 0),
+                reported.getOrDefault(u.getId(), 0))).toList();
+    }
+
+    /** SELECT col, COUNT(*) ... WHERE col IN ids GROUP BY col，返回 id → 数量 */
+    private static <T> Map<Long, Integer> countBy(BaseMapper<T> mapper, QueryWrapper<T> w, String col, List<Long> ids) {
+        Map<Long, Integer> counts = new HashMap<>();
+        mapper.selectMaps(w.select(col, "COUNT(*) AS cnt").in(col, ids).groupBy(col))
+                .forEach(m -> counts.put(((Number) m.get(col)).longValue(), ((Number) m.get("cnt")).intValue()));
+        return counts;
     }
 }

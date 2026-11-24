@@ -28,7 +28,7 @@ async function load(page = q.page) {
 }
 
 async function open(item: DisputeItem) {
-  Object.assign(d, { data: await disputeApi.detail(item.id), result: 'REFUND', reason: '', open: true })
+  Object.assign(d, { data: await disputeApi.detail(item.afterSale.id), result: 'REFUND', reason: '', open: true })
 }
 
 async function more() {
@@ -56,7 +56,10 @@ async function arbitrate() {
   }
 }
 
-const sender = (id: string) => (!d.data ? '' : id === d.data.order.buyer.id ? `买家 ${d.data.order.buyer.nickname}` : id === d.data.order.seller.id ? `卖家 ${d.data.order.seller.nickname}` : '系统')
+const sender = (id: string) => {
+  const o = d.data?.order.order
+  return !o ? '' : id === o.buyer.id ? `买家 ${o.buyer.nickname}` : id === o.seller.id ? `卖家 ${o.seller.nickname}` : '系统'
+}
 onMounted(() => load(1))
 </script>
 
@@ -67,26 +70,26 @@ onMounted(() => load(1))
         <option v-for="s in [3, 4, 5]" :key="s" :value="s">{{ AFTER_SALE_STATUS[s] }}</option>
       </select>
     </div>
-    <el-table v-loading="loading" :data="list" row-key="id" empty-text="没有需要裁决的纠纷">
-      <el-table-column label="订单号" width="160"><template #default="{ row }"><span class="num">{{ row.orderNo }}</span></template></el-table-column>
-      <el-table-column label="商品" prop="goodsTitle" min-width="180" />
-      <el-table-column label="买家 / 卖家" width="160"><template #default="{ row }">{{ row.buyer.nickname }} / {{ row.seller.nickname }}</template></el-table-column>
-      <el-table-column label="金额" width="100"><template #default="{ row }"><span class="price">¥{{ row.refundAmount }}</span></template></el-table-column>
-      <el-table-column label="退款原因" prop="reason" min-width="160" />
-      <el-table-column label="状态" width="110"><template #default="{ row }"><StatusTag :text="AFTER_SALE_STATUS[row.status]" :tone="row.status === 3 ? 'red' : ''" /></template></el-table-column>
-      <el-table-column label="申请介入" width="110"><template #default="{ row }"><span class="subtle">{{ shortTime(row.appealedAt) }}</span></template></el-table-column>
-      <el-table-column label="操作" width="90" fixed="right"><template #default="{ row }"><button class="btn btn-primary btn-sm" @click="open(row as DisputeItem)">{{ row.status === 3 ? '裁决' : '查看' }}</button></template></el-table-column>
+    <el-table v-loading="loading" :data="list" row-key="afterSale.id" empty-text="没有需要裁决的纠纷">
+      <el-table-column label="订单号" width="160"><template #default="{ row }"><span class="num">{{ row.order.orderNo }}</span></template></el-table-column>
+      <el-table-column label="商品" min-width="180"><template #default="{ row }">{{ row.order.goodsTitle }}</template></el-table-column>
+      <el-table-column label="买家 / 卖家" width="160"><template #default="{ row }">{{ row.order.buyer.nickname }} / {{ row.order.seller.nickname }}</template></el-table-column>
+      <el-table-column label="金额" width="100"><template #default="{ row }"><span class="price">¥{{ row.afterSale.refundAmount }}</span></template></el-table-column>
+      <el-table-column label="退款原因" min-width="160"><template #default="{ row }">{{ row.afterSale.reason }}</template></el-table-column>
+      <el-table-column label="状态" width="110"><template #default="{ row }"><StatusTag :text="AFTER_SALE_STATUS[row.afterSale.status]" :tone="row.afterSale.status === 3 ? 'red' : ''" /></template></el-table-column>
+      <el-table-column label="申请介入" width="110"><template #default="{ row }"><span class="subtle">{{ row.appealedAt ? shortTime(row.appealedAt) : '—' }}</span></template></el-table-column>
+      <el-table-column label="操作" width="90" fixed="right"><template #default="{ row }"><button class="btn btn-primary btn-sm" @click="open(row as DisputeItem)">{{ row.afterSale.status === 3 ? '裁决' : '查看' }}</button></template></el-table-column>
     </el-table>
     <el-pagination v-if="total > 10" background layout="total, prev, pager, next" :total="total" :page-size="10" :current-page="q.page" @current-change="load" />
   </section>
 
-  <el-dialog v-model="d.open" :title="`纠纷裁决 · ${d.data?.order.orderNo ?? ''}`" width="min(820px, 94vw)">
+  <el-dialog v-model="d.open" :title="`纠纷裁决 · ${d.data?.order.order.orderNo ?? ''}`" width="min(820px, 94vw)">
     <div v-if="d.data" class="stack">
       <div class="grid-2" style="gap: 12px">
-        <div class="party"><b>买家 · {{ d.data.order.buyer.nickname }}</b><p class="muted">{{ d.data.afterSale.reason }}</p>
+        <div class="party"><b>买家 · {{ d.data.order.order.buyer.nickname }}</b><p class="muted">{{ d.data.afterSale.reason }}</p>
           <p v-if="d.data.buyerAppealRemark" class="muted">补充说明：{{ d.data.buyerAppealRemark }}</p>
           <div class="evid"><a v-for="u in d.data.afterSale.evidenceUrls" :key="u" :href="u" target="_blank" rel="noopener"><img :src="u" alt="买家凭证" /></a></div></div>
-        <div class="party"><b>卖家 · {{ d.data.order.seller.nickname }}</b><p class="muted">{{ d.data.afterSale.sellerReply || '未回复' }}</p></div>
+        <div class="party"><b>卖家 · {{ d.data.order.order.seller.nickname }}</b><p class="muted">{{ d.data.afterSale.sellerReply || '未回复' }}</p></div>
       </div>
       <div class="field"><label>聊天记录</label>
         <div class="chat-log">

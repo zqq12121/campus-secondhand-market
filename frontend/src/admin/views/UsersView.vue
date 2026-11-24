@@ -3,13 +3,14 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import StatusTag from '@/shared/components/StatusTag.vue'
 import UserAvatar from '@/shared/components/UserAvatar.vue'
-import { USER_STATUS } from '@/shared/enums'
+import { CREDIT_LEVEL, USER_STATUS } from '@/shared/enums'
 import { shortTime } from '@/shared/format'
 import { userApi } from '../api'
 import { useAdminAuth } from '../stores/auth'
-import type { AdminUser } from '../types'
+import type { CreditLog } from '@/shared/types'
+import type { AdminUser, AdminUserDetail } from '../types'
 
-/** 用户管理（接口文档 13.5）：禁言 / 封禁 / 解除 / 调整信用分，按权限码显示按钮 */
+/** 用户管理（接口文档 13.5）：详情与信用流水、禁言 / 封禁 / 解除 / 调整信用分，按权限码显示按钮 */
 const auth = useAdminAuth()
 const list = ref<AdminUser[]>([])
 const total = ref(0)
@@ -17,6 +18,7 @@ const loading = ref(false)
 const q = reactive({ keyword: '', campusId: '', status: '', credit: '', page: 1 })
 const punish = reactive({ open: false, user: null as AdminUser | null, kind: 'mute' as 'mute' | 'ban', days: 7 as number | null, reason: '', saving: false })
 const credit = reactive({ open: false, user: null as AdminUser | null, delta: 0, reason: '', saving: false })
+const detail = reactive({ open: false, data: null as AdminUserDetail | null, logs: [] as CreditLog[], logTotal: 0, logPage: 1 })
 
 async function load(page = q.page) {
   q.page = page
@@ -29,6 +31,16 @@ async function load(page = q.page) {
   } finally {
     loading.value = false
   }
+}
+
+async function openDetail(u: AdminUser) {
+  const [d] = await Promise.all([userApi.detail(u.id), loadLogs(u.id, 1)])
+  detail.data = d
+  detail.open = true
+}
+async function loadLogs(id: AdminUser['id'], page: number) {
+  const r = await userApi.creditLogs(id, { page, size: 10 })
+  Object.assign(detail, { logs: r.list, logTotal: r.total, logPage: page })
 }
 
 function openPunish(u: AdminUser) {
@@ -83,7 +95,7 @@ onMounted(() => load(1))
       <button class="btn btn-primary btn-sm" @click="load(1)">查询</button>
     </div>
     <el-table v-loading="loading" :data="list" row-key="id" empty-text="没有符合条件的用户">
-      <el-table-column label="用户" min-width="220"><template #default="{ row }"><div class="row"><UserAvatar size="sm" :name="row.nickname" /><span>{{ row.nickname }}<div class="subtle">{{ row.email }}</div></span></div></template></el-table-column>
+      <el-table-column label="用户" min-width="220"><template #default="{ row }"><div class="row"><UserAvatar size="sm" :name="row.nickname" /><span><button class="link" @click="openDetail(row as AdminUser)">{{ row.nickname }}</button><div class="subtle">{{ row.email }}</div></span></div></template></el-table-column>
       <el-table-column label="校区 / 学院" width="140"><template #default="{ row }">{{ row.campusName }}<div class="subtle">{{ row.college || '—' }}</div></template></el-table-column>
       <el-table-column label="信用分" width="90"><template #default="{ row }"><StatusTag :text="String(row.creditScore)" :tone="row.creditScore >= 80 ? 'green' : row.creditScore >= 60 ? 'yellow' : 'red'" /></template></el-table-column>
       <el-table-column label="在售 / 卖出 / 买入" width="140"><template #default="{ row }"><span class="num">{{ row.onSaleCount }} / {{ row.soldCount }} / {{ row.boughtCount }}</span></template></el-table-column>
@@ -126,8 +138,40 @@ onMounted(() => load(1))
     </div>
     <template #footer><el-button @click="credit.open = false">取消</el-button><el-button type="primary" :loading="credit.saving" @click="doCredit">确认</el-button></template>
   </el-dialog>
+
+  <el-dialog v-model="detail.open" :title="`用户详情 · ${detail.data?.user.nickname ?? ''}`" width="min(720px, 94vw)">
+    <div v-if="detail.data" class="stack">
+      <dl class="kv">
+        <dt>邮箱</dt><dd>{{ detail.data.user.email }}</dd>
+        <dt>校区 / 学院</dt><dd>{{ detail.data.user.campusName }} · {{ detail.data.user.college || '—' }}</dd>
+        <dt>信用</dt><dd>{{ detail.data.user.creditScore }} 分 · {{ CREDIT_LEVEL[detail.data.user.creditLevel] }}</dd>
+        <dt>状态</dt><dd>{{ USER_STATUS[detail.data.user.status] }}{{ detail.data.user.status !== 0 ? (detail.data.user.banUntil ? ` 至 ${shortTime(detail.data.user.banUntil)}` : '（永久）') : '' }}</dd>
+        <dt>余额</dt><dd><span class="price">¥{{ detail.data.user.balance }}</span></dd>
+        <dt>交易</dt><dd>在售 {{ detail.data.stats.onSaleCount }} · 卖出 {{ detail.data.stats.soldCount }} · 买入 {{ detail.data.stats.boughtCount }} · 进行中 {{ detail.data.stats.activeOrderCount }} · 好评率 {{ detail.data.stats.goodRate ? `${detail.data.stats.goodRate}%` : '暂无评价' }} · 被举报 {{ detail.data.user.reportedCount }} 次</dd>
+        <dt>时间</dt><dd>注册 {{ detail.data.user.createdAt.slice(0, 10) }}{{ detail.data.user.lastLoginAt ? ` · 最近登录 ${shortTime(detail.data.user.lastLoginAt)}` : '' }}</dd>
+        <template v-if="detail.data.bio"><dt>简介</dt><dd>{{ detail.data.bio }}</dd></template>
+      </dl>
+      <div>
+        <h4 class="h4">信用流水</h4>
+        <el-table :data="detail.logs" size="small" empty-text="暂无记录">
+          <el-table-column label="时间" width="110"><template #default="{ row }">{{ shortTime(row.createdAt) }}</template></el-table-column>
+          <el-table-column label="变动" width="70"><template #default="{ row }"><span class="num" :class="{ down: row.delta < 0 }">{{ row.delta > 0 ? '+' : '' }}{{ row.delta }}</span></template></el-table-column>
+          <el-table-column label="变动后" width="70" prop="scoreAfter" />
+          <el-table-column label="原因" width="110" prop="reasonText" />
+          <el-table-column label="备注"><template #default="{ row }">{{ row.remark || '—' }}</template></el-table-column>
+        </el-table>
+        <el-pagination v-if="detail.logTotal > 10" small layout="prev, pager, next" :total="detail.logTotal" :page-size="10" :current-page="detail.logPage" @current-change="(p: number) => loadLogs(detail.data!.user.id, p)" />
+      </div>
+    </div>
+  </el-dialog>
 </template>
 
 <style scoped>
 .ops { display: flex; gap: 6px; flex-wrap: wrap; }
+.link { border: 0; padding: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.link:hover { color: var(--primary); text-decoration: underline; }
+.kv { display: grid; grid-template-columns: 96px 1fr; gap: 10px; font-size: 14px; margin: 0; }
+.kv dt { color: var(--text-3); }
+.kv dd { margin: 0; }
+.h4 { font-size: 14px; margin-bottom: 8px; }
 </style>
