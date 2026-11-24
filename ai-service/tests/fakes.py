@@ -133,13 +133,29 @@ class FakeJava:
 
 
 class FakeIndex:
-    def __init__(self, hits: list[dict[str, Any]] | None = None) -> None:
+    def __init__(self, hits: list[dict[str, Any]] | None = None, reranker: Any = None) -> None:
         self.hits = hits or []
         self.queries: list[str] = []
+        self.reranker = reranker
 
     async def vector_search(self, query: str, flt: Any, top_k: int) -> list[dict[str, Any]]:
         self.queries.append(query)
         return self.hits
+
+
+class FakeReranker:
+    """按文本里是否含关键词打分；fail=True 时抛错。"""
+
+    def __init__(self, keyword: str, fail: bool = False) -> None:
+        self.keyword = keyword
+        self.fail = fail
+        self.calls: list[tuple[str, list[str]]] = []
+
+    async def scores(self, query: str, docs: list[str]) -> list[float]:
+        self.calls.append((query, docs))
+        if self.fail:
+            raise RuntimeError("model down")
+        return [1.0 if self.keyword in d else 0.0 for d in docs]
 
 
 def goods(gid: str, title: str, price: str, status: int = 2, reason: str | None = None) -> dict[str, Any]:

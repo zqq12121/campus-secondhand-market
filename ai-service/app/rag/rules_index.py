@@ -1,4 +1,4 @@
-"""规则知识库：knowledge/*.md + 上线公告，按二级标题切片后向量化，内容变化时整体重建。"""
+"""规则知识库：knowledge/*.md + 上线公告，按二级标题切片后向量化，内容变化时整体重建。检索时向量召回再重排。"""
 import asyncio
 import hashlib
 import json
@@ -15,6 +15,7 @@ from redisvl.schema import IndexSchema
 
 from app.java_client import JavaClient
 from app.rag.embedder import Embedder
+from app.rag.reranker import Reranker, rerank
 
 log = logging.getLogger(__name__)
 
@@ -22,6 +23,8 @@ KNOWLEDGE_DIR = pathlib.Path(__file__).resolve().parents[2] / "knowledge"
 HASH_KEY = "ai:rules_index:hash"
 MAX_CHUNK_CHARS = 500
 REFRESH_SECONDS = 600
+# 有重排序模型时，向量先召回 top_k 的这么多倍，重排后再取 top_k
+RERANK_FACTOR = 3
 
 
 @dataclass(frozen=True)
@@ -71,8 +74,9 @@ def build_schema(dims: int) -> IndexSchema:
 
 class RulesIndex:
     def __init__(self, redis: Redis, embedder: Embedder, java: JavaClient,
-                 knowledge_dir: pathlib.Path = KNOWLEDGE_DIR) -> None:
+                 knowledge_dir: pathlib.Path = KNOWLEDGE_DIR, reranker: Reranker | None = None) -> None:
         self._redis = redis
+        self._reranker = reranker
         self._embedder = embedder
         self._java = java
         self._dir = knowledge_dir
@@ -121,6 +125,14 @@ class RulesIndex:
 
     async def search(self, question: str, top_k: int = 5) -> list[dict[str, Any]]:
         vector = await self._embedder.embed_query(question)
+        n = top_k * RERANK_FACTOR if self._reranker else top_k
         q = VectorQuery(vector=vector, vector_field_name="embedding", return_fields=["title", "content"],
-                        num_results=top_k)
-        return [{"source": d["title"], "content": d["content"]} for d in await self.index.query(q)]
+                        num_results=n)
+        hits = await self.index.query(q)
+        if self._reranker is not None and len(hits) > 1:
+            try:
+                order = await rerank(self._reranker, question, [f"{d['title']}\n{d['content']}" for d in hits])
+                hits = [hits[i] for i in order]
+            except Exception as e:
+                log.warning("规则重排序失败，使用向量顺序: %s", e)
+        return [{"source": d["title"], "content": d["content"]} for d in hits[:top_k]]

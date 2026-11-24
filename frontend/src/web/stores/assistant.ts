@@ -82,6 +82,7 @@ export const useAssistantStore = defineStore('assistant', () => {
       await call((e) => {
         switch (e.event) {
           case 'token': reply.text += e.data; reply.activity = ''; break
+          case 'revise': reply.text = e.data; break
           case 'tool': reply.activity = e.data.status === 'start' ? TOOL_LABELS[e.data.name] ?? '正在处理' : ''; break
           case 'goods': reply.goods.push(...e.data.filter((g) => !reply.goods.some((x) => x.id === g.id))); break
           case 'confirm': reply.cards.push({ ...e.data, state: 'pending' }); break

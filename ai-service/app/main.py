@@ -11,6 +11,7 @@ from typing import Any, Literal
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi import Path as PathParam
 from fastapi.responses import JSONResponse, StreamingResponse
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 from langchain_deepseek import ChatDeepSeek
 from langgraph.checkpoint.redis.aio import AsyncRedisSaver
@@ -26,9 +27,12 @@ from app.graph.builder import build_graph
 from app.graph.context import RequestContext
 from app.graph.images import human_content
 from app.graph.memory import SLOTS, namespace
+from app.guard import INPUT_REFUSAL, is_injection
 from app.java_client import JavaApiError, JavaAuthError, JavaClient
+from app.observability import TraceCollector, flush_langfuse, langfuse_handler
 from app.rag.embedder import SentenceTransformerEmbedder
 from app.rag.goods_index import GoodsIndex
+from app.rag.reranker import CrossEncoderReranker
 from app.rag.rules_index import RulesIndex
 from app.ratelimit import check_rate
 
@@ -59,7 +63,8 @@ class AppState:
     """进程级依赖，lifespan 中创建。分类 / 校区列表缓存 10 分钟。"""
 
     def __init__(self, settings: Settings, redis: Redis, java: JavaClient, goods_index: GoodsIndex,
-                 graph: CompiledStateGraph, store: BaseStore, rules_index: RulesIndex | None = None) -> None:
+                 graph: CompiledStateGraph, store: BaseStore, rules_index: RulesIndex | None = None,
+                 callbacks: list[BaseCallbackHandler] | None = None) -> None:
         self.settings = settings
         self.redis = redis
         self.java = java
@@ -67,6 +72,8 @@ class AppState:
         self.graph = graph
         self.store = store
         self.rules_index = rules_index
+        # 所有请求共用的额外回调（Langfuse）；每个请求自己的 TraceCollector 在 stream_chat 里创建
+        self.callbacks = callbacks or []
         self._meta: tuple[float, list[dict[str, Any]], list[dict[str, Any]]] | None = None
 
     async def meta(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -88,8 +95,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     redis = Redis.from_url(s.redis_url)
     java = JavaClient(s.backend_base_url)
     embedder = await asyncio.to_thread(SentenceTransformerEmbedder, s.embedding_model, s.embedding_query_instruction)
-    goods_index = GoodsIndex(s, redis, embedder)
-    rules_index = RulesIndex(redis, embedder, java)
+    reranker = await asyncio.to_thread(CrossEncoderReranker, s.rerank_model) if s.rerank_model else None
+    goods_index = GoodsIndex(s, redis, embedder, reranker)
+    rules_index = RulesIndex(redis, embedder, java, reranker=reranker)
+    langfuse = langfuse_handler(s)
+    if langfuse:
+        log.info("已启用 Langfuse 链路追踪：%s", s.langfuse_base_url)
     tasks = [asyncio.create_task(rules_index.run_forever())]
     if s.ai_mysql_user:
         tasks.append(asyncio.create_task(goods_index.run_forever()))
@@ -104,10 +115,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await checkpointer.asetup()
         await store.setup()
         graph = build_graph(build_llm(s), s, checkpointer, store)
-        app.state.ai = AppState(s, redis, java, goods_index, graph, store, rules_index)
+        app.state.ai = AppState(s, redis, java, goods_index, graph, store, rules_index,
+                                callbacks=[langfuse] if langfuse else [])
         yield
     for t in tasks:
         t.cancel()
+    flush_langfuse(s)
     await java.aclose()
     await redis.aclose()
 
@@ -152,11 +165,15 @@ def thread_config(ctx: RequestContext, conv_id: str) -> dict[str, Any]:
 
 
 async def stream_chat(st: AppState, ctx: RequestContext, conv_id: str, graph_input: Any) -> AsyncIterator[str]:
-    config = thread_config(ctx, conv_id)
-    usage = {"input_tokens": 0, "output_tokens": 0}
-    tool_trace: list[str] = []
+    trace = TraceCollector(st.settings.ai_price_input_per_m, st.settings.ai_price_output_per_m)
+    config = {**thread_config(ctx, conv_id), "callbacks": [trace, *st.callbacks],
+              # Langfuse 按这两个字段归组用户和会话
+              "metadata": {"langfuse_user_id": str(ctx.user["id"]), "langfuse_session_id": conv_id}}
     started = time.monotonic()
     last_msg_id: str | None = None
+    # 本轮 agent 每条发言的全文，输出防护改写某条时据此拼出整轮的新文本
+    texts: dict[str, str] = {}
+    revised: list[str] = []
     pending = False
     try:
         async for mode, chunk in st.graph.astream(graph_input, config, stream_mode=["messages", "updates"]):
@@ -167,6 +184,7 @@ async def stream_chat(st: AppState, ctx: RequestContext, conv_id: str, graph_inp
                     if last_msg_id is not None and msg.id != last_msg_id:
                         yield sse("token", "\n\n")
                     last_msg_id = msg.id
+                    texts[msg.id] = texts.get(msg.id, "") + msg.text
                     yield sse("token", msg.text)
                 continue
             for node, update in chunk.items():
@@ -176,11 +194,14 @@ async def stream_chat(st: AppState, ctx: RequestContext, conv_id: str, graph_inp
                         yield sse("confirm", {"interruptId": it.id, **it.value})
                     continue
                 for m in (update or {}).get("messages", []):
-                    if isinstance(m, AIMessage):
-                        for k in usage:
-                            usage[k] += (m.usage_metadata or {}).get(k, 0)
+                    if node == "output_guard" and isinstance(m, AIMessage):
+                        # 回复已经流式发出去了，整轮文本替换成处理后的版本
+                        revised.append(m.id)
+                        # 正常情况下与流式片段同 id；对不上时它就是本轮最后一条发言
+                        texts[m.id if m.id in texts or not texts else list(texts)[-1]] = m.text
+                        yield sse("revise", "\n\n".join(texts.values()))
+                    elif isinstance(m, AIMessage):
                         for tc in m.tool_calls:
-                            tool_trace.append(tc["name"])
                             yield sse("tool", {"name": tc["name"], "status": "start"})
                     elif isinstance(m, ToolMessage):
                         yield sse("tool", {"name": m.name, "status": "end"})
@@ -188,14 +209,16 @@ async def stream_chat(st: AppState, ctx: RequestContext, conv_id: str, graph_inp
                             yield sse("goods", [card])
                         if draft := listing_draft(m):
                             yield sse("listing", draft)
-        yield sse("done", {"conversationId": conv_id, "usage": usage, "pending": pending})
+        yield sse("done", {"conversationId": conv_id, "usage": trace.usage(), "pending": pending})
     except Exception:
         log.exception("对话失败 user=%s conv=%s", ctx.user["id"], conv_id)
         yield sse("error", {"code": 500, "message": "助手暂时不可用，请稍后再试"})
     finally:
-        # 只记录调用序列、耗时和用量，不记录对话内容
-        log.info("chat user=%s conv=%s tools=%s ms=%d usage=%s pending=%s", ctx.user["id"], conv_id, tool_trace,
-                 (time.monotonic() - started) * 1000, usage, pending)
+        # 每个请求一行 JSON：各次模型调用和工具调用的耗时、用量、成本，不记录对话内容
+        log.info("chat_trace %s", json.dumps({
+            "user": ctx.user["id"], "conv": conv_id, "ms": int((time.monotonic() - started) * 1000),
+            "pending": pending, "revised": bool(revised), **trace.summary(),
+        }, ensure_ascii=False))
 
 
 def _tool_json(m: ToolMessage, name: str) -> dict[str, Any] | None:
@@ -242,6 +265,13 @@ async def guarded_context(st: AppState, token: str, me: dict[str, Any]) -> Reque
                           categories=categories, campuses=campuses, rules_index=st.rules_index)
 
 
+async def refusal(st: AppState, ctx: RequestContext, conv_id: str) -> AsyncIterator[str]:
+    state = await st.graph.aget_state(thread_config(ctx, conv_id))
+    yield sse("token", INPUT_REFUSAL)
+    yield sse("done", {"conversationId": conv_id, "usage": {"input_tokens": 0, "output_tokens": 0},
+                       "pending": bool(state.interrupts)})
+
+
 def sse_response(gen: AsyncIterator[str]) -> StreamingResponse:
     return StreamingResponse(gen, media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
@@ -256,6 +286,10 @@ async def chat(body: ChatRequest, user: tuple[str, dict[str, Any]] = Depends(cur
         raise HTTPException(400, "图片必须先上传到平台")
     ctx = await guarded_context(st, token, me)
     conv_id = body.conversationId or str(uuid.uuid4())
+    if is_injection(body.message):
+        # 不进模型、不写入会话历史，也不取消待确认的卡片
+        log.warning("输入防护拦截 user=%s conv=%s", me["id"], conv_id)
+        return sse_response(refusal(st, ctx, conv_id))
     await cancel_pending(st.graph, thread_config(ctx, conv_id))
     message = HumanMessage(human_content(body.message, body.images))
     return sse_response(stream_chat(st, ctx, conv_id, {"messages": [message]}))
