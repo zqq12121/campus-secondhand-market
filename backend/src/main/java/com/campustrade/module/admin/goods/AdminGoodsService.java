@@ -1,6 +1,7 @@
 package com.campustrade.module.admin.goods;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.campustrade.common.Biz;
@@ -8,9 +9,12 @@ import com.campustrade.common.Consts.AuditResult;
 import com.campustrade.common.Consts.GoodsStatus;
 import com.campustrade.common.Consts.NotifyType;
 import com.campustrade.common.Consts.RefType;
+import com.campustrade.common.Consts.ReportTarget;
 import com.campustrade.common.ErrorCode;
 import com.campustrade.common.PageQuery;
 import com.campustrade.common.PageResult;
+import com.campustrade.module.admin.system.entity.AdminUser;
+import com.campustrade.module.admin.system.mapper.AdminUserMapper;
 import com.campustrade.module.common.CommonService;
 import com.campustrade.module.goods.GoodsAuditService;
 import com.campustrade.module.goods.GoodsService;
@@ -21,6 +25,8 @@ import com.campustrade.module.goods.mapper.GoodsMapper;
 import com.campustrade.module.notification.NotificationService;
 import com.campustrade.module.order.OrderFlow;
 import com.campustrade.module.order.mapper.TradeOrderMapper;
+import com.campustrade.module.report.entity.Report;
+import com.campustrade.module.report.mapper.ReportMapper;
 import com.campustrade.module.user.FollowService;
 import com.campustrade.module.user.UserService;
 import com.campustrade.module.user.entity.User;
@@ -34,8 +40,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /** 后台商品审核与管理 */
 @Service
@@ -48,6 +56,8 @@ public class AdminGoodsService {
     private final GoodsMapper goodsMapper;
     private final AuditRecordMapper auditRecordMapper;
     private final TradeOrderMapper orderMapper;
+    private final ReportMapper reportMapper;
+    private final AdminUserMapper adminUserMapper;
     private final GoodsService goodsService;
     private final GoodsAuditService auditService;
     private final OrderFlow orderFlow;
@@ -73,14 +83,18 @@ public class AdminGoodsService {
     }
 
     public record AdminGoodsVO(Long id, String title, String description, String coverUrl, List<String> images,
-                               Long categoryId, List<String> categoryPath, BigDecimal price, Integer conditionLevel,
+                               Long categoryId, List<String> categoryPath, String categoryName, BigDecimal price,
+                               Integer conditionLevel,
                                Integer tradeMode, String campusName, String location, Integer stock, Integer status,
-                               String auditRemark, Integer viewCount, Integer favoriteCount, SellerInfo seller,
+                               String auditRemark, Integer viewCount, Integer favoriteCount, int reportCount,
+                               SellerInfo seller,
                                List<String> hitWords, LocalDateTime submittedAt, LocalDateTime publishedAt,
                                LocalDateTime createdAt) {
     }
 
-    public record AuditRecordVO(Long id, Integer auditorType, Long auditorId, Integer result, String reason,
+    /** auditorName：管理员审核时为管理员姓名，系统审核为 null */
+    public record AuditRecordVO(Long id, Integer auditorType, Long auditorId, String auditorName, Integer result,
+                                String reason,
                                 String hitWords, LocalDateTime createdAt) {
     }
 
@@ -151,10 +165,16 @@ public class AdminGoodsService {
     }
 
     public List<AuditRecordVO> records(long goodsId) {
-        return auditRecordMapper.selectList(new LambdaQueryWrapper<AuditRecord>()
-                        .eq(AuditRecord::getTargetType, 1).eq(AuditRecord::getTargetId, goodsId)
-                        .orderByDesc(AuditRecord::getId)).stream()
-                .map(r -> new AuditRecordVO(r.getId(), r.getAuditorType(), r.getAuditorId(), r.getResult(),
+        List<AuditRecord> records = auditRecordMapper.selectList(new LambdaQueryWrapper<AuditRecord>()
+                .eq(AuditRecord::getTargetType, 1).eq(AuditRecord::getTargetId, goodsId)
+                .orderByDesc(AuditRecord::getId));
+        List<Long> adminIds = records.stream().filter(r -> r.getAuditorType() == AUDITOR_ADMIN)
+                .map(AuditRecord::getAuditorId).distinct().toList();
+        Map<Long, String> names = adminIds.isEmpty() ? Map.of() : adminUserMapper.selectByIds(adminIds).stream()
+                .collect(Collectors.toMap(AdminUser::getId, AdminUser::getRealName));
+        return records.stream()
+                .map(r -> new AuditRecordVO(r.getId(), r.getAuditorType(), r.getAuditorId(),
+                        r.getAuditorType() == AUDITOR_ADMIN ? names.get(r.getAuditorId()) : null, r.getResult(),
                         r.getReason(), r.getHitWords(), r.getCreatedAt())).toList();
     }
 
@@ -208,8 +228,10 @@ public class AdminGoodsService {
     private List<AdminGoodsVO> toVOs(List<Goods> goods) {
         Map<Long, User> sellers = userService.mapByIds(goods.stream().map(Goods::getSellerId).distinct().toList());
         Map<Long, String> campus = commonService.campusNames();
+        Map<Long, Integer> reports = reportCounts(goods.stream().map(Goods::getId).toList());
         List<AdminGoodsVO> list = new ArrayList<>();
         for (Goods g : goods) {
+            List<String> path = commonService.categoryPath(g.getCategoryId());
             AuditRecord sys = auditRecordMapper.selectOne(new LambdaQueryWrapper<AuditRecord>()
                     .eq(AuditRecord::getTargetType, 1).eq(AuditRecord::getTargetId, g.getId())
                     .eq(AuditRecord::getAuditorType, AUDITOR_SYSTEM).orderByDesc(AuditRecord::getId).last("LIMIT 1"));
@@ -217,12 +239,24 @@ public class AdminGoodsService {
                     : List.of(sys.getHitWords().split(","));
             User s = sellers.get(g.getSellerId());
             list.add(new AdminGoodsVO(g.getId(), g.getTitle(), g.getDescription(), g.getCoverUrl(),
-                    goodsService.images(g.getId()), g.getCategoryId(), commonService.categoryPath(g.getCategoryId()),
+                    goodsService.images(g.getId()), g.getCategoryId(), path, path.isEmpty() ? null : path.getLast(),
                     g.getPrice(), g.getConditionLevel(), g.getTradeMode(), campus.get(g.getCampusId()),
                     g.getLocation(), g.getStock(), g.getStatus(), g.getAuditRemark(), g.getViewCount(),
-                    g.getFavoriteCount(), s == null ? null : new SellerInfo(s.getId(), s.getNickname(), s.getCreditScore()),
+                    g.getFavoriteCount(), reports.getOrDefault(g.getId(), 0), s == null ? null : new SellerInfo(s.getId(), s.getNickname(), s.getCreditScore()),
                     hits, sys == null ? null : sys.getCreatedAt(), g.getPublishedAt(), g.getCreatedAt()));
         }
         return list;
+    }
+
+    /** 商品被举报次数（含已处理的举报） */
+    private Map<Long, Integer> reportCounts(List<Long> goodsIds) {
+        if (goodsIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, Integer> counts = new HashMap<>();
+        reportMapper.selectMaps(new QueryWrapper<Report>().select("target_id", "COUNT(*) AS cnt")
+                        .eq("target_type", ReportTarget.GOODS).in("target_id", goodsIds).groupBy("target_id"))
+                .forEach(m -> counts.put(((Number) m.get("target_id")).longValue(), ((Number) m.get("cnt")).intValue()));
+        return counts;
     }
 }

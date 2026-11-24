@@ -38,6 +38,13 @@ async function toggleCat(c: AdminCategory) {
 async function delCat(c: AdminCategory) {
   try { await confirmDel(`分类「${c.name}」`); await categoryApi.remove(c.id); loadCats() } catch (e) { ignoreCancel(e) }
 }
+/** 与相邻的同级分类交换位置，同级分类按新顺序重新编号后批量保存 */
+async function moveCat(list: AdminCategory[], i: number, dir: -1 | 1) {
+  const next = [...list]
+  ;[next[i], next[i + dir]] = [next[i + dir], next[i]]
+  await categoryApi.sort(next.map((c, k) => ({ id: c.id, sort: k + 1 })))
+  loadCats()
+}
 function toggleExpand(id: string) {
   expanded.value.has(id) ? expanded.value.delete(id) : expanded.value.add(id)
   expanded.value = new Set(expanded.value)
@@ -105,20 +112,24 @@ onMounted(() => {
       <div class="toolbar"><span class="subtle">只支持两级；分类下有商品或子分类时只能停用，不能删除</span>
         <button class="btn btn-primary btn-sm" style="margin-left: auto" @click="editCat()"><AppIcon name="plus" size="sm" />新增一级分类</button></div>
       <div class="cat-tree">
-        <template v-for="c in cats" :key="c.id">
+        <template v-for="(c, i) in cats" :key="c.id">
           <div class="cat-row">
             <button class="icon-btn sm" :aria-label="expanded.has(c.id) ? '收起' : '展开'" @click="toggleExpand(c.id)"><AppIcon :name="expanded.has(c.id) ? 'down' : 'right'" size="sm" /></button>
             <span class="name"><b>{{ c.name }}</b> <span class="subtle">· {{ c.goodsCount }} 件 · 排序 {{ c.sort }}</span></span>
             <span class="tag" :class="c.enabled ? 'tag-green' : ''">{{ c.enabled ? '启用' : '停用' }}</span>
+            <button class="btn btn-ghost btn-sm" :disabled="i === 0" @click="moveCat(cats, i, -1)">上移</button>
+            <button class="btn btn-ghost btn-sm" :disabled="i === cats.length - 1" @click="moveCat(cats, i, 1)">下移</button>
             <button class="btn btn-ghost btn-sm" @click="editCat(undefined, c.id)">新增子类</button>
             <button class="btn btn-ghost btn-sm" @click="editCat(c)">编辑</button>
             <button class="btn btn-ghost btn-sm" @click="toggleCat(c)">{{ c.enabled ? '停用' : '启用' }}</button>
             <button class="btn btn-ghost btn-sm" @click="delCat(c)">删除</button>
           </div>
           <template v-if="expanded.has(c.id)">
-            <div v-for="s in c.children" :key="s.id" class="cat-row child">
+            <div v-for="(s, j) in c.children" :key="s.id" class="cat-row child">
               <span class="name">{{ s.name }} <span class="subtle">· {{ s.goodsCount }} 件 · 排序 {{ s.sort }}</span></span>
               <span class="tag" :class="s.enabled ? 'tag-green' : ''">{{ s.enabled ? '启用' : '停用' }}</span>
+              <button class="btn btn-ghost btn-sm" :disabled="j === 0" @click="moveCat(c.children!, j, -1)">上移</button>
+              <button class="btn btn-ghost btn-sm" :disabled="j === c.children!.length - 1" @click="moveCat(c.children!, j, 1)">下移</button>
               <button class="btn btn-ghost btn-sm" @click="editCat(s)">编辑</button>
               <button class="btn btn-ghost btn-sm" @click="toggleCat(s)">{{ s.enabled ? '停用' : '启用' }}</button>
               <button class="btn btn-ghost btn-sm" @click="delCat(s)">删除</button>

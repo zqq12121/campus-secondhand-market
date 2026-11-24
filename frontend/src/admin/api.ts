@@ -1,10 +1,10 @@
 /** 管理后台接口，前缀 /api/admin/v1（接口文档第 13 章） */
 import { createHttp } from '@/shared/request'
-import type { Id, PageQuery, PageResult } from '@/shared/types'
+import type { CreditLog, Id, PageQuery, PageResult } from '@/shared/types'
 import type {
-  AdminAccount, AdminCategory, CreditAppealItem, AdminGoods, AdminLoginResult, AdminMe, AdminOrder, AdminOrderDetail, AdminUser, Announcement,
-  AuditGoods, AuditRecord, CategoryShare, DisputeDetail, DisputeItem, OperationLog, Overview, Permission, ReportHandleBody,
-  ReportItem, Role, SensitiveWord, Trend,
+  AdminAccount, AdminCategory, CreditAppealItem, AdminGoods, AdminGoodsDetail, AdminLoginResult, AdminMe, AdminOrder, AdminOrderDetail, AdminUser,
+  AdminUserDetail, Announcement, AuditGoods, AuditRecord, CategoryShare, DisputeDetail, DisputeItem, OperationLog, Overview, Permission,
+  ReportDetail, ReportHandleBody, ReportItem, Role, SensitiveWord, Trend,
 } from './types'
 
 export const ADMIN_TOKEN_KEY = 'ct_admin_token'
@@ -45,11 +45,14 @@ export const auditApi = {
 
 export const goodsApi = {
   list: (q: Q) => http.get<PageResult<AdminGoods>>('/goods', q),
+  detail: (id: Id) => http.get<AdminGoodsDetail>(`/goods/${id}`),
   forceOff: (id: Id, reason: string) => http.post<null>(`/goods/${id}/force-off`, { reason }),
 }
 
 export const userApi = {
   list: (q: Q) => http.get<PageResult<AdminUser>>('/users', q),
+  detail: (id: Id) => http.get<AdminUserDetail>(`/users/${id}`),
+  creditLogs: (id: Id, q: PageQuery) => http.get<PageResult<CreditLog>>(`/users/${id}/credit-logs`, q),
   mute: (id: Id, days: number | null, reason: string) => http.post<null>(`/users/${id}/mute`, { days, reason }),
   ban: (id: Id, days: number | null, reason: string) => http.post<null>(`/users/${id}/ban`, { days, reason }),
   unban: (id: Id) => http.post<null>(`/users/${id}/unban`),
@@ -70,6 +73,7 @@ export const disputeApi = {
 
 export const reportApi = {
   list: (q: Q) => http.get<PageResult<ReportItem>>('/reports', q),
+  detail: (id: Id) => http.get<ReportDetail>(`/reports/${id}`),
   handle: (id: Id, body: ReportHandleBody) => http.post<{ affected: number }>(`/reports/${id}/handle`, body),
 }
 
@@ -79,6 +83,7 @@ export const categoryApi = {
   update: (id: Id, body: { name: string; iconUrl?: string | null; sort: number }) => http.put<null>(`/categories/${id}`, body),
   setEnabled: (id: Id, enabled: boolean) => http.put<null>(`/categories/${id}/enabled`, { enabled }),
   remove: (id: Id) => http.del<null>(`/categories/${id}`),
+  sort: (items: { id: Id; sort: number }[]) => http.put<null>('/categories/sort', items),
 }
 
 export const contentApi = {

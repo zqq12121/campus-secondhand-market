@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import CoverImage from '@/shared/components/CoverImage.vue'
 import StatusTag from '@/shared/components/StatusTag.vue'
-import { REPORT_REASON, REPORT_STATUS, REPORT_TARGET } from '@/shared/enums'
+import { GOODS_STATUS, REPORT_REASON, REPORT_STATUS, REPORT_TARGET, USER_STATUS, WANT_STATUS } from '@/shared/enums'
 import { shortTime } from '@/shared/format'
 import { reportApi } from '../api'
-import type { ReportItem } from '../types'
+import type { ReportDetail, ReportItem } from '../types'
 
 /** 举报处理（接口文档 13.8）。诈骗成立时必须包含封禁（文档规则），前端自动勾选且不可取消。 */
 const list = ref<ReportItem[]>([])
 const total = ref(0)
 const loading = ref(false)
 const q = reactive({ status: 0, targetType: '', page: 1 })
+const detail = reactive({ open: false, data: null as ReportDetail | null })
 const h = reactive({ open: false, item: null as ReportItem | null, established: true, actions: [] as string[], banDays: 7 as number | null, result: '', saving: false })
 
 const ACTIONS = computed(() => {
@@ -35,6 +37,25 @@ async function load(page = q.page) {
   } finally {
     loading.value = false
   }
+}
+
+/** 被举报对象的当前状态：商品 / 求购帖看对象本身，用户看账号状态 */
+const targetStatus = computed(() => {
+  const d = detail.data
+  if (!d) return ''
+  if (d.report.targetType === 2) return d.target.ownerStatus === null ? '' : USER_STATUS[d.target.ownerStatus]
+  if (d.target.status === null) return ''
+  return (d.report.targetType === 1 ? GOODS_STATUS : WANT_STATUS)[d.target.status]
+})
+
+async function openDetail(item: ReportItem) {
+  detail.data = await reportApi.detail(item.id)
+  detail.open = true
+}
+function handleFromDetail() {
+  if (!detail.data) return
+  detail.open = false
+  open(detail.data.report)
 }
 
 function open(item: ReportItem) {
@@ -78,12 +99,44 @@ onMounted(() => load(1))
       <el-table-column label="举报人" width="100"><template #default="{ row }">{{ row.reporter.nickname }}</template></el-table-column>
       <el-table-column label="被举报次数" width="100"><template #default="{ row }"><span class="num">{{ row.targetReportCount }}</span></template></el-table-column>
       <el-table-column label="时间" width="110"><template #default="{ row }"><span class="subtle">{{ shortTime(row.createdAt) }}</span></template></el-table-column>
-      <el-table-column label="操作" width="90" fixed="right"><template #default="{ row }">
-        <button v-if="row.status === 0" class="btn btn-primary btn-sm" @click="open(row as ReportItem)">处理</button><span v-else class="subtle">{{ row.result }}</span>
+      <el-table-column label="操作" width="150" fixed="right"><template #default="{ row }">
+        <div class="ops">
+          <button class="btn btn-outline btn-sm" @click="openDetail(row as ReportItem)">详情</button>
+          <button v-if="row.status === 0" class="btn btn-primary btn-sm" @click="open(row as ReportItem)">处理</button>
+        </div>
+        <span v-if="row.status !== 0" class="subtle">{{ row.result }}</span>
       </template></el-table-column>
     </el-table>
     <el-pagination v-if="total > 10" background layout="total, prev, pager, next" :total="total" :page-size="10" :current-page="q.page" @current-change="load" />
   </section>
+
+  <el-dialog v-model="detail.open" title="举报详情" width="min(640px, 94vw)">
+    <div v-if="detail.data" class="stack">
+      <dl class="kv">
+        <dt>举报对象</dt><dd><span class="tag tag-blue">{{ REPORT_TARGET[detail.data.report.targetType] }}</span> {{ detail.data.report.targetTitle }}</dd>
+        <dt>原因</dt><dd><StatusTag :text="REPORT_REASON[detail.data.report.reasonType]" :tone="detail.data.report.reasonType === 3 ? 'red' : ''" /> · 该对象共被举报 {{ detail.data.report.targetReportCount }} 次</dd>
+        <dt>举报人</dt><dd>{{ detail.data.report.reporter.nickname }} · {{ shortTime(detail.data.report.createdAt) }}</dd>
+        <dt>举报说明</dt><dd>{{ detail.data.report.description || '—' }}</dd>
+        <dt>处理状态</dt><dd>{{ REPORT_STATUS[detail.data.report.status] }}{{ detail.data.report.result ? `：${detail.data.report.result}` : '' }}</dd>
+      </dl>
+      <div v-if="detail.data.report.evidenceUrls.length" class="imgs">
+        <a v-for="u in detail.data.report.evidenceUrls" :key="u" :href="u" target="_blank" rel="noopener" class="thumb t96"><CoverImage :src="u" /></a>
+      </div>
+      <div>
+        <h4 class="h4">被举报对象（当前）</h4>
+        <div v-if="!detail.data.target.exists" class="alert alert-warn">对象已删除</div>
+        <div v-else class="row target">
+          <span v-if="detail.data.target.coverUrl" class="thumb t72"><CoverImage :src="detail.data.target.coverUrl" /></span>
+          <div class="stack" style="gap: 4px">
+            <b>{{ detail.data.target.title }} <span v-if="targetStatus" class="tag">{{ targetStatus }}</span></b>
+            <span v-if="detail.data.target.description" class="muted pre">{{ detail.data.target.description }}</span>
+            <span class="subtle">{{ detail.data.report.targetType === 2 ? '用户' : '发布者' }}：{{ detail.data.target.ownerNickname }} · 信用分 {{ detail.data.target.ownerCreditScore }}<template v-if="detail.data.report.targetType !== 2 && detail.data.target.ownerStatus"> · {{ USER_STATUS[detail.data.target.ownerStatus] }}</template></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <template v-if="detail.data?.report.status === 0" #footer><el-button type="primary" @click="handleFromDetail">处理</el-button></template>
+  </el-dialog>
 
   <el-dialog v-model="h.open" title="处理举报" width="min(560px, 92vw)">
     <div v-if="h.item" class="stack">
@@ -103,3 +156,16 @@ onMounted(() => load(1))
     <template #footer><el-button @click="h.open = false">取消</el-button><el-button type="primary" :loading="h.saving" @click="submit">提交</el-button></template>
   </el-dialog>
 </template>
+
+<style scoped>
+.ops { display: flex; gap: 6px; }
+.kv { display: grid; grid-template-columns: 96px 1fr; gap: 10px; font-size: 14px; margin: 0; }
+.kv dt { color: var(--text-3); }
+.kv dd { margin: 0; }
+.h4 { font-size: 14px; margin-bottom: 8px; }
+.imgs { display: flex; gap: 8px; flex-wrap: wrap; }
+.t96 { width: 96px; height: 96px; overflow: hidden; }
+.t72 { overflow: hidden; }
+.target { align-items: flex-start; }
+.pre { white-space: pre-wrap; }
+</style>
