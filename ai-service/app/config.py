@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     # bge 中文模型对短查询建议加的检索指令
     embedding_query_instruction: str = "为这个句子生成表示以用于检索相关文章："
     goods_sync_interval_seconds: int = 120
+    # 本地重排序模型（cross-encoder），留空则不重排、直接用 RRF / 向量顺序
+    rerank_model: str = "BAAI/bge-reranker-base"
 
     # agent
     ai_max_tool_calls: int = 8
@@ -44,6 +46,14 @@ class Settings(BaseSettings):
     ai_session_ttl_days: int = 30
     ai_rate_per_minute: int = 10
     ai_rate_per_day: int = 100
+
+    # 可观测性：模型价格（元 / 百万 token），只用于估算成本，留 0 不计
+    ai_price_input_per_m: float = 0.0
+    ai_price_output_per_m: float = 0.0
+    # Langfuse 链路追踪，两个密钥都填才启用；会把对话内容发到 Langfuse
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_base_url: str = "https://cloud.langfuse.com"
 
     @property
     def redis_url(self) -> str:

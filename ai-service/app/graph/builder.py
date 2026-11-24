@@ -1,11 +1,14 @@
 """校园二手助手的 LangGraph 图。
 
-START → load_memory → prepare → agent ⇄ tools → save_memory → END
-  load_memory：读长期偏好（Store）放进 state
-  prepare：    历史过长时把旧消息压缩成摘要（短期记忆的长度控制）
-  agent：      DeepSeek + 工具；本轮工具调用达上限后不再给工具，强制作答
-  save_memory：从本轮对话抽取偏好写回 Store
+START → load_memory → prepare → agent ⇄ tools → output_guard → save_memory → END
+  load_memory： 读长期偏好（Store）放进 state
+  prepare：     历史过长时把旧消息压缩成摘要（短期记忆的长度控制）
+  agent：       DeepSeek + 工具；本轮工具调用达上限后不再给工具，强制作答
+  output_guard：检查最终回复（提示词泄露、手机号 / 身份证号），有问题就按原 id 替换这条消息
+  save_memory： 从本轮对话抽取偏好写回 Store
 """
+import logging
+
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import (AIMessage, AnyMessage, HumanMessage, RemoveMessage, SystemMessage,
                                      ToolMessage)
@@ -21,6 +24,9 @@ from app.graph.context import RequestContext, get_ctx
 from app.graph.images import prepare_for_model
 from app.graph.memory import extract_and_save, format_profile, load_profile
 from app.graph.tools import TOOLS
+from app.guard import check_output, shingles
+
+log = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """你是「校园二手助手」，服务本校学生：帮他们找在售商品、解答平台规则、查询自己的订单、起草求购帖和商品发布草稿。
 
@@ -67,6 +73,9 @@ SUMMARY_PROMPT = """把下面的对话压缩成一段不超过 300 字的中文�
 {previous}
 对话：
 {dialogue}"""
+
+
+PROMPT_SHINGLES = shingles(SYSTEM_PROMPT)
 
 
 class State(MessagesState):
@@ -138,6 +147,17 @@ def build_graph(llm: BaseChatModel, settings: Settings, checkpointer: BaseCheckp
             response = await llm_with_tools.ainvoke([system, *history])
         return {"messages": [response]}
 
+    async def output_guard(state: State) -> dict:
+        last = state["messages"][-1]
+        if not isinstance(last, AIMessage) or not last.text:
+            return {}
+        safe, reasons = check_output(last.text, PROMPT_SHINGLES)
+        if not reasons:
+            return {}
+        log.warning("输出防护触发：%s", reasons)
+        # 同 id 的消息会覆盖原消息，历史里留下的是处理后的版本
+        return {"messages": [last.model_copy(update={"content": safe})]}
+
     async def save_memory(state: State, config: RunnableConfig, *, store: BaseStore) -> dict:
         messages = state["messages"]
         human = next((m.text for m in reversed(messages) if isinstance(m, HumanMessage)), "")
@@ -150,11 +170,13 @@ def build_graph(llm: BaseChatModel, settings: Settings, checkpointer: BaseCheckp
     graph.add_node("prepare", prepare)
     graph.add_node("agent", agent)
     graph.add_node("tools", ToolNode(TOOLS))
+    graph.add_node("output_guard", output_guard)
     graph.add_node("save_memory", save_memory)
     graph.add_edge(START, "load_memory")
     graph.add_edge("load_memory", "prepare")
     graph.add_edge("prepare", "agent")
-    graph.add_conditional_edges("agent", tools_condition, {"tools": "tools", END: "save_memory"})
+    graph.add_conditional_edges("agent", tools_condition, {"tools": "tools", END: "output_guard"})
     graph.add_edge("tools", "agent")
+    graph.add_edge("output_guard", "save_memory")
     graph.add_edge("save_memory", END)
     return graph.compile(checkpointer=checkpointer, store=store)

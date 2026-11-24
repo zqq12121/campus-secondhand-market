@@ -1,5 +1,6 @@
 """agent 的全部工具。只读工具在本文件，写工具（需用户确认）在 drafts.py。工具结果一律是 JSON 字符串。"""
 import json
+import logging
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
@@ -7,15 +8,22 @@ from langchain_core.tools import tool
 
 from app.graph.context import get_ctx
 from app.graph.drafts import draft_want_post, suggest_listing
+from app.guard import redact_untrusted
 from app.java_client import JavaApiError
 from app.rag.goods_index import hybrid_search
+
+log = logging.getLogger(__name__)
 
 # 这些原因下商品不能推荐给当前用户
 UNAVAILABLE_REASONS = {"NOT_ON_SALE", "OUT_OF_STOCK", "BLOCKED"}
 
 
 def _dump(obj: Any) -> str:
-    return json.dumps(obj, ensure_ascii=False)
+    # 商品、订单、公告里有卖家和运营写的内容，先过滤疑似注入再交给模型
+    safe, n = redact_untrusted(obj)
+    if n:
+        log.warning("工具结果过滤疑似注入 %d 处", n)
+    return json.dumps(safe, ensure_ascii=False)
 
 
 @tool(parse_docstring=True)

@@ -1,4 +1,4 @@
-"""商品向量索引：MySQL 增量同步到 Redis，检索时与 Java 关键词搜索做 RRF 混合。"""
+"""商品向量索引：MySQL 增量同步到 Redis，检索时与 Java 关键词搜索做 RRF 混合，再用 cross-encoder 重排。"""
 import asyncio
 import logging
 from datetime import datetime
@@ -16,6 +16,7 @@ from redisvl.schema import IndexSchema
 from app.config import Settings
 from app.java_client import JavaClient
 from app.rag.embedder import Embedder
+from app.rag.reranker import Reranker, rerank
 
 log = logging.getLogger(__name__)
 
@@ -23,6 +24,8 @@ PREFIX = "ai:goods"
 WATERMARK_KEY = "ai:goods_index:watermark"
 ON_SALE = 2
 RRF_K = 60
+# RRF 合并后取前多少条交给重排序；越多越准、越慢（CPU 上 30 条约几百毫秒）
+RERANK_CANDIDATES = 30
 RETURN_FIELDS = ["goods_id", "title", "price", "campus_id", "campus_name", "category_name", "cover_url", "condition_level"]
 
 SYNC_SQL = """
@@ -93,10 +96,12 @@ def rrf_merge(*ranked: list[str], k: int = RRF_K) -> list[str]:
 
 
 class GoodsIndex:
-    def __init__(self, settings: Settings, redis: Redis, embedder: Embedder) -> None:
+    def __init__(self, settings: Settings, redis: Redis, embedder: Embedder,
+                 reranker: Reranker | None = None) -> None:
         self._settings = settings
         self._redis = redis
         self._embedder = embedder
+        self.reranker = reranker
         self.index = AsyncSearchIndex(build_schema(embedder.dims), redis_client=redis)
 
     # ---------- 同步 ----------
@@ -163,11 +168,16 @@ class GoodsIndex:
         return await self.index.query(q)
 
 
+def rerank_text(card: dict[str, Any]) -> str:
+    return "\n".join(f"{label}{card[k]}" for label, k in (("", "title"), ("分类：", "categoryName"),
+                                                           ("校区：", "campusName")) if card.get(k))
+
+
 async def hybrid_search(index: GoodsIndex, java: JavaClient, token: str, query: str,
                         campus_id: str | None = None, category_id: str | None = None,
                         min_price: float | None = None, max_price: float | None = None,
                         top_k: int = 20, limit: int = 10) -> list[dict[str, Any]]:
-    """向量 topK + Java 关键词 topK，RRF 合并后取 limit 条，返回统一的商品卡片字段。"""
+    """向量 topK + Java 关键词 topK，RRF 合并；有重排序模型时对前 RERANK_CANDIDATES 条重排，取 limit 条。"""
     flt = build_filter(campus_id, category_id, min_price, max_price)
     vec_task = index.vector_search(query, flt, top_k)
     kw_task = java.search_goods(token, keyword=query[:30], campusId=campus_id, categoryId=category_id,
@@ -190,4 +200,11 @@ async def hybrid_search(index: GoodsIndex, java: JavaClient, token: str, query: 
                           "campusName": g.get("campusName"), "coverUrl": g.get("coverUrl"),
                           "conditionLevel": g.get("conditionLevel")}
     merged = rrf_merge([d["goods_id"] for d in vec_res], [g["id"] for g in kw_res])
+    if index.reranker is not None and len(merged) > 1:
+        candidates = merged[:RERANK_CANDIDATES]
+        try:
+            order = await rerank(index.reranker, query, [rerank_text(cards[g]) for g in candidates])
+            merged = [candidates[i] for i in order]
+        except Exception as e:
+            log.warning("重排序失败，使用 RRF 顺序: %s", e)
     return [cards[gid] for gid in merged[:limit]]

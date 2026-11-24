@@ -47,6 +47,8 @@ export interface DoneEvent {
 
 export type StreamEvent =
   | { event: 'token'; data: string }
+  /** 输出防护改写了回复：用 data 整体替换本轮已收到的文本 */
+  | { event: 'revise'; data: string }
   | { event: 'tool'; data: { name: string; status: 'start' | 'end' } }
   | { event: 'goods'; data: AssistantGoods[] }
   | { event: 'confirm'; data: ConfirmEvent }
