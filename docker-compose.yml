@@ -10,12 +10,16 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD:?请在 .env 中设置 MYSQL_PASSWORD}
       TZ: Asia/Shanghai
+      # 首次初始化时由 03-ai-readonly.sh 创建 ai-service 只读账号
+      AI_MYSQL_USER: ${AI_MYSQL_USER:-}
+      AI_MYSQL_PASSWORD: ${AI_MYSQL_PASSWORD:-}
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci --default-time-zone=+08:00
     ports:
       - "${MYSQL_PORT:-3306}:3306"
     volumes:
       - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./sql/init_data.sql:/docker-entrypoint-initdb.d/02-init_data.sql:ro
+      - ./docker/mysql/03-ai-readonly.sh:/docker-entrypoint-initdb.d/03-ai-readonly.sh:ro
       - mysql-data:/var/lib/mysql
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]

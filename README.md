@@ -37,6 +37,8 @@
 | [ai-service](ai-service/README.md) | Python 3.11 + FastAPI + LangGraph，DeepSeek 模型，本地 bge-small-zh 向量 |
 | [docs/阅读指南.md](docs/阅读指南.md) | 从零读懂项目：包结构约定、模块地图、推荐阅读顺序、关键流程的代码路线、中间件用途 |
 | [docs/接口文档.md](docs/接口文档.md) | 前后端接口约定，含状态机、错误码和设计假设 |
+| [docs/上线部署.md](docs/上线部署.md) | 生产部署：单机 docker compose + HTTPS、启动自检、备份、上线检查清单 |
+| deploy | 生产用 Nginx HTTPS 配置、证书签发与备份脚本 |
 | docker/elasticsearch | 带 smartcn 中文分词插件的 ES 镜像（`docker compose --profile es`） |
 | [sql](sql) | `schema.sql` 表结构、`init_data.sql` 初始数据、`demo_goods.sql` 演示商品、`upgrade/` 已有库升级脚本 |
 | prototype | 早期静态原型页面 |
@@ -72,6 +74,8 @@ cd frontend && npm install && npm run dev
 ```bash
 set -a && source .env && set +a && docker compose --profile app up -d --build
 ```
+
+正式上线（HTTPS、关闭对外数据库端口、启动自检）见 [docs/上线部署.md](docs/上线部署.md)。
 
 ## 测试
 

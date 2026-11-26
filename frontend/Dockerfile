@@ -8,5 +8,6 @@ RUN npm run build
 
 FROM nginx:1.27-alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx/app-locations.conf nginx/security-headers.conf /etc/nginx/snippets/
 COPY --from=build /src/dist /usr/share/nginx/html
 EXPOSE 80

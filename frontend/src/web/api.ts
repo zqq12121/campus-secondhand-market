@@ -5,13 +5,14 @@ import type {
   ConversationDetail, ConversationItem, CreditLog, FavoriteItem, GoodsDetail, GoodsForm, GoodsItem, GoodsQuery,
   GoodsSaveResult, HomeData, Id, LoginResult, MeProfile, MeUpdateBody, MyGoodsItem, NotificationItem,
   OrderCreateBody, OrderCreateResult, OrderDetail, OrderItem, PageQuery, PageResult, PageWithCounts, PayResult,
-  PayStatus, RegisterBody, ReportBody, ReviewBody, ReviewItem, ReviewTags, SendMessageBody, SendMessageResult,
+  PayStatus, RegisterBody, ReportBody, ReviewBody, ReviewItem, ReviewTags, SendMessageBody, SendMessageResult, SiteConfig,
   UnreadCount, UserHome, WantForm, WantItem,
 } from '@/shared/types'
 import type { RequestOptions } from '@/shared/request'
 
 /* 2. 公共 */
 export const commonApi = {
+  config: () => http.get<SiteConfig>('/common/config'),
   campuses: () => http.get<Campus[]>('/common/campuses'),
   categories: () => http.get<Category[]>('/common/categories'),
   home: () => http.get<HomeData>('/home'),

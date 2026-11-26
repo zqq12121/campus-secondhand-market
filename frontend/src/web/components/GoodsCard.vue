@@ -6,8 +6,10 @@ import UserAvatar from '@/shared/components/UserAvatar.vue'
 import { priceText } from '@/shared/format'
 import { GOODS_STATUS } from '@/shared/enums'
 import type { GoodsItem } from '@/shared/types'
+import { useMetaStore } from '../stores/meta'
 
 const props = defineProps<{ goods: GoodsItem & { status?: number } }>()
+const meta = useMetaStore()
 const free = computed(() => Number(props.goods.price) === 0)
 /** 收藏列表里已下架 / 已售出的商品置灰 */
 const inactive = computed(() => props.goods.status != null && props.goods.status !== 2)
@@ -18,7 +20,7 @@ const inactive = computed(() => props.goods.status != null && props.goods.status
     <div class="goods-cover">
       <CoverImage :src="goods.coverUrl" :alt="goods.title" :tint="(Number(goods.id) % 6) + 1" />
       <div class="badge-pos">
-        <span v-if="goods.tradeMode !== 1" class="tag tag-green"><AppIcon name="shield" size="sm" />担保</span>
+        <span v-if="goods.tradeMode !== 1 && meta.config.guaranteeEnabled" class="tag tag-green"><AppIcon name="shield" size="sm" />担保</span>
         <span v-if="free" class="tag tag-orange">免费送</span>
         <span v-if="inactive" class="tag">{{ GOODS_STATUS[goods.status!] }}</span>
       </div>

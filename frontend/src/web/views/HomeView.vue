@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import AppIcon from '@/shared/components/AppIcon.vue'
 import { shortTime } from '@/shared/format'
 import type { GoodsItem, HomeData } from '@/shared/types'
@@ -9,6 +9,7 @@ import { useAuthStore } from '../stores/auth'
 import { useMetaStore } from '../stores/meta'
 
 const meta = useMetaStore()
+const slogan = computed(() => `只有 ${meta.config.emailSuffix} 认证同学才能交易，${meta.config.guaranteeEnabled ? '面交或担保' : '当面交易'}，放心买卖。`)
 const auth = useAuthStore()
 const home = ref<HomeData | null>(null)
 const goods = ref<GoodsItem[]>([])
@@ -57,17 +58,17 @@ onMounted(() => {
         <RouterLink v-if="home?.banners[0]" class="banner" :to="home.banners[0].linkUrl || '/'"
           :style="home.banners[0].imageUrl ? { backgroundImage: `linear-gradient(120deg, rgba(4,120,87,.85), rgba(16,185,129,.6)), url(${home.banners[0].imageUrl})` } : undefined">
           <h1>{{ home.banners[0].title }}</h1>
-          <p>只有 @wu.edu.cn 认证同学才能交易，面交或担保，放心买卖。</p>
+          <p>{{ slogan }}</p>
           <span class="btn banner-btn">去看看</span>
         </RouterLink>
         <div v-else class="banner">
           <h1>学长学姐的好物，在校园里传下去</h1>
-          <p>只有 @wu.edu.cn 认证同学才能交易，面交或担保，放心买卖。</p>
+          <p>{{ slogan }}</p>
           <RouterLink class="btn banner-btn" to="/publish">发布我的闲置</RouterLink>
         </div>
         <div class="quick">
           <RouterLink to="/wants"><span class="ic tint-3"><AppIcon name="megaphone" /></span><span><b>求购广场</b><br /><span class="subtle">发布需求，等人来卖</span></span></RouterLink>
-          <RouterLink :to="{ name: 'search', query: { tradeMode: '2' } }"><span class="ic tint-1"><AppIcon name="shield" /></span><span><b>担保交易</b><br /><span class="subtle">确认收货后才打款</span></span></RouterLink>
+          <RouterLink v-if="meta.config.guaranteeEnabled" :to="{ name: 'search', query: { tradeMode: '2' } }"><span class="ic tint-1"><AppIcon name="shield" /></span><span><b>担保交易</b><br /><span class="subtle">确认收货后才打款</span></span></RouterLink>
           <RouterLink :to="{ name: 'search', query: { free: '1' } }"><span class="ic tint-5"><AppIcon name="gift" /></span><span><b>免费送</b><br /><span class="subtle">自提即可带走</span></span></RouterLink>
         </div>
       </section>

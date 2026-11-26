@@ -9,6 +9,7 @@ import { priceText, uuid } from '@/shared/format'
 import type { GoodsDetail } from '@/shared/types'
 import { goodsApi, orderApi } from '../api'
 import { useAuthStore } from '../stores/auth'
+import { useMetaStore } from '../stores/meta'
 
 /**
  * 确认下单（接口文档 8.1）。
@@ -18,6 +19,7 @@ import { useAuthStore } from '../stores/auth'
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const meta = useMetaStore()
 const goodsId = route.params.goodsId as string
 const requestId = uuid()
 
@@ -27,14 +29,15 @@ const quantity = ref(1)
 const submitting = ref(false)
 
 const free = computed(() => Number(g.value?.price) === 0)
-/** 商品支持担保，且卖家信用 ≥ 60 才能选担保 */
-const escrowOk = computed(() => !!g.value && g.value.tradeMode !== 1 && g.value.seller.creditScore >= 60 && !free.value)
+/** 平台开放担保、商品支持担保，且卖家信用 ≥ 60 才能选担保 */
+const escrowOk = computed(() => meta.config.guaranteeEnabled && !!g.value && g.value.tradeMode !== 1 && g.value.seller.creditScore >= 60 && !free.value)
 const total = computed(() => (Number(g.value?.price ?? 0) * quantity.value).toFixed(2))
 
 onMounted(async () => {
-  g.value = await goodsApi.detail(goodsId)
-  if (!g.value.canBuy) {
-    ElMessage.warning('这件商品当前不能购买')
+  const [detail] = await Promise.all([goodsApi.detail(goodsId), meta.load()])
+  g.value = detail
+  if (!g.value.canBuy || (g.value.tradeMode === 2 && !meta.config.guaranteeEnabled)) {
+    ElMessage.warning(g.value.canBuy ? '这件商品仅支持担保交易，担保交易暂未开放' : '这件商品当前不能购买')
     return router.replace(`/goods/${goodsId}`)
   }
   tradeMode.value = g.value.tradeMode === 2 && escrowOk.value ? 2 : g.value.tradeMode === 1 || !escrowOk.value ? 1 : 2
@@ -78,7 +81,7 @@ async function submit() {
         <div class="radio-group">
           <button v-if="g.tradeMode !== 2" type="button" class="radio-card mode-card" :class="{ active: tradeMode === 1 }" @click="tradeMode = 1">
             <span class="t"><AppIcon name="pin" />面交</span><span class="d">卖家确认后约时间地点，当面验货付款。平台不经手资金。</span></button>
-          <button v-if="g.tradeMode !== 1" type="button" class="radio-card mode-card" :class="{ active: tradeMode === 2 }" :disabled="!escrowOk" @click="tradeMode = 2">
+          <button v-if="g.tradeMode !== 1 && meta.config.guaranteeEnabled" type="button" class="radio-card mode-card" :class="{ active: tradeMode === 2 }" :disabled="!escrowOk" @click="tradeMode = 2">
             <span class="t"><AppIcon name="shield" />担保交易</span><span class="d">{{ escrowOk ? '现在付款到平台，确认收货后才打款给卖家，有问题可申请退款。' : '卖家信用分低于 60，暂不能使用担保交易。' }}</span></button>
         </div>
         <div class="alert alert-info"><AppIcon name="message" /><span>面交时间、地点请和卖家在聊天里约定。<RouterLink :to="`/goods/${g.id}`" class="link">返回商品页</RouterLink></span></div>

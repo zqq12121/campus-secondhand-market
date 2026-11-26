@@ -51,6 +51,7 @@ public class SecurityConfig {
                                 U + "/users/*/goods", U + "/users/*/reviews", U + "/wants", U + "/wants/*",
                                 U + "/review-tags").permitAll()
                         .requestMatchers("/ws", "/ws/**", "/ws-sockjs/**", "/api/pay/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
                         .requestMatchers("/uploads/**", "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**")
                         .permitAll()
                         .requestMatchers("/api/admin/v1/**").hasRole("ADMIN")

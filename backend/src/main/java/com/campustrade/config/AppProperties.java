@@ -28,14 +28,18 @@ public record AppProperties(Jwt jwt, Mail mail, Upload upload, AdminInit adminIn
     }
 
     /**
-     * 支付配置。mode=alipay 走支付宝开放平台（沙箱）；mode=mock 使用本地模拟收银台，
-     * 仅用于没有沙箱密钥时的本地开发与演示。
+     * 支付配置。mode=alipay 走支付宝开放平台；mode=mock 使用本地模拟收银台，
+     * 仅用于没有沙箱密钥时的本地开发与演示；mode=disabled 关闭担保交易，只允许面交（生产未接支付时用）。
      */
     public record Pay(String mode, String appId, String privateKey, String alipayPublicKey, String gateway,
                       String notifyUrl, String returnUrl) {
 
         public boolean isMock() {
             return !"alipay".equalsIgnoreCase(mode);
+        }
+
+        public boolean guaranteeEnabled() {
+            return !"disabled".equalsIgnoreCase(mode);
         }
     }
 }

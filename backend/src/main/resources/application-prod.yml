@@ -1,0 +1,26 @@
+# 生产环境：SPRING_PROFILES_ACTIVE=prod 时叠加在 application.yml 之上
+server:
+  shutdown: graceful
+  # 经 Nginx 转发，按 X-Forwarded-* 取真实 IP 与协议
+  forward-headers-strategy: native
+  compression:
+    enabled: true
+  error:
+    include-stacktrace: never
+    include-message: never
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+# 生产不暴露接口文档
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+logging:
+  level:
+    root: INFO
+    com.campustrade: INFO

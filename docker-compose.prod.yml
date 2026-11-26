@@ -1,0 +1,127 @@
+# 生产部署覆盖文件：叠加在 docker-compose.yml 之上使用，详见 docs/上线部署.md
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile app up -d --build
+# 与开发配置的区别：
+#   - MySQL / Redis / RabbitMQ / ES 不再映射端口到宿主机，只在容器网络内可达
+#   - Redis、RabbitMQ 启用密码；后端以 prod profile 启动（启动自检、关闭接口文档）
+#   - 前端 Nginx 监听 80/443，证书来自 Let's Encrypt，certbot 容器自动续期
+#   - 所有服务异常退出自动重启、日志按大小轮转、带健康检查
+x-common: &common
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "5"
+
+services:
+  mysql:
+    <<: *common
+    ports: !reset []
+
+  redis:
+    <<: *common
+    ports: !reset []
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?生产环境请在 .env 中设置 REDIS_PASSWORD}"]
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      retries: 10
+
+  rabbitmq:
+    <<: *common
+    ports: !reset []
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?生产环境请在 .env 中设置 RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?生产环境请在 .env 中设置 RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      retries: 10
+
+  elasticsearch:
+    <<: *common
+    ports: !reset []
+
+  backend:
+    <<: *common
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      # 与 mysql / redis / rabbitmq 容器取同一来源（compose 插值），避免 shell 里导出的同名变量与 .env 不一致
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      # 未接支付宝正式环境时关闭担保交易，只允许面交
+      PAY_MODE: ${PAY_MODE:-disabled}
+      ALIPAY_NOTIFY_URL: ${PUBLIC_BASE_URL}/api/pay/alipay/notify
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 90s
+      retries: 5
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  ai:
+    <<: *common
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/api/v1/ai/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 180s
+      retries: 3
+
+  frontend:
+    <<: *common
+    ports: !override
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?生产环境请在 .env 中设置 DOMAIN（站点域名，不带 https://）}
+    # 证书续期后要 reload 才生效：后台每 6 小时 reload 一次；前台仍走镜像入口脚本（负责渲染 templates/）
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["(while :; do sleep 21600; nginx -s reload; done) & exec /docker-entrypoint.sh nginx -g 'daemon off;'"]
+    volumes:
+      # 渲染结果写到 conf.d/default.conf，覆盖镜像里的 HTTP 配置
+      - ./deploy/nginx/https.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - letsencrypt:/etc/letsencrypt:ro
+      - certbot-www:/var/www/certbot:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      ai:
+        condition: service_started
+
+  certbot:
+    profiles: ["app"]
+    image: certbot/certbot:latest
+    container_name: campus-trade-certbot
+    restart: unless-stopped
+    # 每 12 小时检查一次，证书剩余不足 30 天时续期
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 43200; done"]
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  rabbitmq-data:
+  letsencrypt:
+  certbot-www:

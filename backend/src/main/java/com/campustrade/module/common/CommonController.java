@@ -7,11 +7,14 @@ import com.campustrade.common.ErrorCode;
 import com.campustrade.common.PageQuery;
 import com.campustrade.common.PageResult;
 import com.campustrade.common.R;
+import com.campustrade.config.AppProperties;
 import com.campustrade.infra.FileStorageService;
 import com.campustrade.module.common.CommonService.CampusVO;
 import com.campustrade.module.common.CommonService.CategoryNode;
 import com.campustrade.module.common.entity.Announcement;
+import com.campustrade.module.common.entity.School;
 import com.campustrade.module.common.mapper.AnnouncementMapper;
+import com.campustrade.module.common.mapper.SchoolMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -36,6 +39,8 @@ public class CommonController {
     private final CommonService commonService;
     private final FileStorageService fileStorageService;
     private final AnnouncementMapper announcementMapper;
+    private final SchoolMapper schoolMapper;
+    private final AppProperties props;
 
     public record BannerVO(Long id, String title, String imageUrl, String linkUrl) {
     }
@@ -49,12 +54,23 @@ public class CommonController {
     public record RootCategoryVO(Long id, String name, String iconUrl) {
     }
 
+    /** 站点配置：学校名与邮箱后缀取 school 表第一条；guaranteeEnabled=false 时前端隐藏担保交易 */
+    public record ConfigVO(String schoolName, String emailSuffix, boolean guaranteeEnabled) {
+    }
+
     public record HomeVO(List<BannerVO> banners, List<NoticeVO> notices, List<RootCategoryVO> categories) {
     }
 
     @GetMapping("/common/campuses")
     public R<List<CampusVO>> campuses() {
         return R.ok(commonService.campuses());
+    }
+
+    @GetMapping("/common/config")
+    public R<ConfigVO> config() {
+        School school = schoolMapper.selectOne(new LambdaQueryWrapper<School>().orderByAsc(School::getId).last("LIMIT 1"));
+        return R.ok(new ConfigVO(school == null ? "" : school.getName(), school == null ? "" : school.getEmailSuffix(),
+                props.pay().guaranteeEnabled()));
     }
 
     @GetMapping("/common/categories")
