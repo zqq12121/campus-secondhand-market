@@ -2,6 +2,7 @@ package com.campustrade.module.order;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.campustrade.common.Biz;
 import com.campustrade.common.BizException;
@@ -62,7 +63,6 @@ import java.util.Map;
 public class OrderService {
 
     private static final DateTimeFormatter NO_PREFIX = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
-    private static final int STOCK_RETRY = 3;
     private static final int MEET_CODE_MAX_FAIL = 5;
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -89,11 +89,14 @@ public class OrderService {
         if (!Boolean.TRUE.equals(first)) {
             String existing = redis.opsForValue().get(reqKey);
             Biz.check(existing != null && !"PENDING".equals(existing), ErrorCode.CONFLICT, "订单正在创建，请稍候");
-            return resp(orderMapper.selectById(Long.parseLong(existing)));
+            TradeOrder done = orderMapper.selectById(Long.parseLong(existing));
+            Biz.check(done != null, ErrorCode.CONFLICT, "订单正在创建，请稍候");
+            return resp(done);
         }
         try {
             TradeOrder o = doCreate(buyerId, req);
-            redis.opsForValue().set(reqKey, String.valueOf(o.getId()), Duration.ofMinutes(10));
+            // 提交后再写订单 id：否则重复请求可能拿到 id 却查不到尚未提交的订单
+            TxUtil.afterCommit(() -> redis.opsForValue().set(reqKey, String.valueOf(o.getId()), Duration.ofMinutes(10)));
             return resp(o);
         } catch (RuntimeException e) {
             redis.delete(reqKey);
@@ -149,29 +152,30 @@ public class OrderService {
         return g != null && g.getStatus() == GoodsStatus.ON_SALE ? g.getStock() : null;
     }
 
-    /** 乐观锁扣库存，库存归 0 时商品进入"交易中" */
+    /**
+     * 条件更新扣库存（stock >= 购买数量且在售才扣），库存归 0 时商品进入"交易中"。
+     * 能走到这里的请求数已被 Redis 预扣限制在库存以内，用单条条件更新而不是「读版本号 + 重试」，
+     * 高并发下不会因版本冲突耗尽重试次数而少卖。
+     */
     private Goods deductStock(long buyerId, CreateReq req) {
-        for (int i = 0; i < STOCK_RETRY; i++) {
-            Goods g = Biz.notNull(goodsMapper.selectById(req.goodsId()), ErrorCode.GOODS_NOT_FOUND);
-            Biz.check(!g.getSellerId().equals(buyerId), ErrorCode.BUY_SELF);
-            Biz.check(g.getStatus() == GoodsStatus.ON_SALE, ErrorCode.GOODS_NOT_BUYABLE);
-            Biz.check(g.getTradeMode() == TradeMode.BOTH || g.getTradeMode().equals(req.tradeMode()),
-                    ErrorCode.TRADE_MODE_UNSUPPORTED);
-            Biz.check(!userService.isBlocked(g.getSellerId(), buyerId), ErrorCode.BLOCKED_BY_SELLER);
-            Biz.check(g.getStock() >= req.quantity(), ErrorCode.STOCK_NOT_ENOUGH);
-            int left = g.getStock() - req.quantity();
-            Goods upd = new Goods();
-            upd.setId(g.getId());
-            upd.setVersion(g.getVersion());
-            upd.setStock(left);
-            if (left == 0) {
-                upd.setStatus(GoodsStatus.TRADING);
-            }
-            if (goodsMapper.updateById(upd) == 1) {
-                return g;
-            }
+        Goods g = Biz.notNull(goodsMapper.selectById(req.goodsId()), ErrorCode.GOODS_NOT_FOUND);
+        Biz.check(!g.getSellerId().equals(buyerId), ErrorCode.BUY_SELF);
+        Biz.check(g.getStatus() == GoodsStatus.ON_SALE, ErrorCode.GOODS_NOT_BUYABLE);
+        Biz.check(g.getTradeMode() == TradeMode.BOTH || g.getTradeMode().equals(req.tradeMode()),
+                ErrorCode.TRADE_MODE_UNSUPPORTED);
+        Biz.check(!userService.isBlocked(g.getSellerId(), buyerId), ErrorCode.BLOCKED_BY_SELLER);
+        int q = req.quantity();
+        // status 写在 stock 前面：MySQL 按从左到右赋值，IF 里比较的是扣减前的库存
+        int n = goodsMapper.update(new LambdaUpdateWrapper<Goods>().eq(Goods::getId, g.getId())
+                .eq(Goods::getStatus, GoodsStatus.ON_SALE).ge(Goods::getStock, q)
+                .setSql("status = IF(stock = " + q + ", " + GoodsStatus.TRADING + ", status), stock = stock - " + q
+                        + ", version = version + 1"));
+        if (n == 1) {
+            return g;
         }
-        throw new BizException(ErrorCode.CONFLICT, "购买人数较多，请重试");
+        Goods now = goodsMapper.selectById(g.getId());
+        Biz.check(now != null && now.getStatus() == GoodsStatus.ON_SALE, ErrorCode.GOODS_NOT_BUYABLE);
+        throw new BizException(ErrorCode.STOCK_NOT_ENOUGH);
     }
 
     private String nextOrderNo() {

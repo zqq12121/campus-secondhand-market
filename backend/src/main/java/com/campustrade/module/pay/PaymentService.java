@@ -50,7 +50,8 @@ public class PaymentService {
 
     @Transactional
     public PayResult startPay(long buyerId, long orderId) {
-        TradeOrder o = orderMapper.selectById(orderId);
+        // 锁订单行：同一订单并发点「去支付」时串行执行，避免重复插入同一 out_trade_no
+        TradeOrder o = lockOrder(orderId);
         Biz.check(o != null && o.getBuyerId() == buyerId, ErrorCode.NOT_FOUND);
         Biz.check(o.getStatus() == OrderStatus.WAIT_PAY, ErrorCode.ORDER_STATE_INVALID, "订单状态不允许支付");
         LocalDateTime expireAt = orderFlow.payExpireAt(o);
@@ -106,6 +107,9 @@ public class PaymentService {
             log.error("支付金额不一致 outTradeNo={} expect={} actual={}", outTradeNo, p.getAmount(), amount);
             return false;
         }
+        // 先锁订单再改支付单，与取消（先改订单、再关支付单）加锁顺序一致，避免死锁；
+        // 锁住后读到的是最新状态：取消已提交就走下面的「关单后到账退款」，不会因流转冲突回滚丢掉这笔入账
+        TradeOrder o = lockOrder(p.getOrderId());
         LocalDateTime now = LocalDateTime.now();
         int n = paymentMapper.update(new LambdaUpdateWrapper<Payment>().eq(Payment::getId, p.getId())
                 .in(Payment::getStatus, UNPAID, CLOSED).set(Payment::getStatus, PAID)
@@ -114,7 +118,6 @@ public class PaymentService {
         if (n == 0) {
             return true;
         }
-        TradeOrder o = orderMapper.selectById(p.getOrderId());
         if (o.getStatus() == OrderStatus.WAIT_PAY) {
             orderFlow.transit(o, OrderStateMachine.PAY, Operator.SYSTEM, null, null, null,
                     w -> w.set(TradeOrder::getPaidAt, now));
@@ -125,6 +128,10 @@ public class PaymentService {
             refundLatePay(p);
         }
         return true;
+    }
+
+    private TradeOrder lockOrder(long orderId) {
+        return orderMapper.selectOne(new LambdaQueryWrapper<TradeOrder>().eq(TradeOrder::getId, orderId).last("FOR UPDATE"));
     }
 
     /** 售后 / 裁决退款，成功后支付单标记为已全额退款 */

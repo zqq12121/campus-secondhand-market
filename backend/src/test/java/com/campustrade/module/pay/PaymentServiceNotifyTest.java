@@ -12,6 +12,8 @@ import com.campustrade.support.MpTestSupport;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -25,6 +27,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -93,9 +96,16 @@ class PaymentServiceNotifyTest {
         stubPayment(payment());
         when(paymentMapper.update(any(Wrapper.class))).thenReturn(1);
         TradeOrder o = order(OrderStatus.WAIT_PAY);
-        when(orderMapper.selectById(9001L)).thenReturn(o);
+        when(orderMapper.selectOne(any(Wrapper.class))).thenReturn(o);
 
         assertThat(service.handlePaid(OUT_TRADE_NO, "T1", new BigDecimal("300.00"), "{}")).isTrue();
+
+        // 先锁订单行再改支付单：与取消的加锁顺序一致，并发时不会死锁
+        InOrder lockOrder = inOrder(orderMapper, paymentMapper);
+        ArgumentCaptor<Wrapper<TradeOrder>> lock = ArgumentCaptor.forClass(Wrapper.class);
+        lockOrder.verify(orderMapper).selectOne(lock.capture());
+        lockOrder.verify(paymentMapper).update(any(Wrapper.class));
+        assertThat(lock.getValue().getCustomSqlSegment()).endsWith("FOR UPDATE");
 
         verify(orderFlow).transit(eq(o), eq(OrderStateMachine.PAY), anyInt(), isNull(), isNull(), isNull(), any());
         verify(gateway, never()).refund(anyString(), anyString(), any());
@@ -117,7 +127,8 @@ class PaymentServiceNotifyTest {
     void latePayAfterCloseIsRefunded() {
         stubPayment(payment());
         when(paymentMapper.update(any(Wrapper.class))).thenReturn(1);
-        when(orderMapper.selectById(9001L)).thenReturn(order(OrderStatus.CANCELED));
+        // 取消已先提交：锁住后读到的是已取消，走自动退款而不是因流转冲突回滚
+        when(orderMapper.selectOne(any(Wrapper.class))).thenReturn(order(OrderStatus.CANCELED));
         when(gateway.refund(OUT_TRADE_NO, "RL11", new BigDecimal("300.00"))).thenReturn(true);
 
         assertThat(service.handlePaid(OUT_TRADE_NO, "T1", new BigDecimal("300.00"), "{}")).isTrue();

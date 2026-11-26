@@ -1,5 +1,7 @@
 package com.campustrade.module.order;
 
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.campustrade.common.BizException;
 import com.campustrade.common.Consts.GoodsStatus;
 import com.campustrade.common.Consts.OrderStatus;
@@ -16,6 +18,8 @@ import com.campustrade.module.order.entity.TradeOrder;
 import com.campustrade.module.order.mapper.TradeOrderMapper;
 import com.campustrade.module.user.UserService;
 import com.campustrade.module.user.entity.User;
+import com.campustrade.support.MpTestSupport;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,7 +46,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/** 下单：幂等键、Redis 预扣、乐观锁扣库存 */
+/** 下单：幂等键、Redis 预扣、条件更新扣库存 */
 @ExtendWith(MockitoExtension.class)
 class OrderServiceCreateTest {
 
@@ -68,6 +72,11 @@ class OrderServiceCreateTest {
     private AppProperties props;
     @InjectMocks
     private OrderService service;
+
+    @BeforeAll
+    static void initTables() {
+        MpTestSupport.initTables(Goods.class);
+    }
 
     @BeforeEach
     void setUp() {
@@ -115,25 +124,33 @@ class OrderServiceCreateTest {
     void redisSoldOutRejectsWithoutTouchingDatabase() {
         when(stockCache.tryDeduct(eq(GOODS), eq(1), any())).thenReturn(false);
         expect(ErrorCode.STOCK_NOT_ENOUGH, req(1, TradeMode.FACE));
-        verify(goodsMapper, never()).updateById(any(Goods.class));
+        verify(goodsMapper, never()).update(any(Wrapper.class));
         verify(orderMapper, never()).insert(any(TradeOrder.class));
         // 失败后释放幂等键，允许用户重试
         verify(redis).delete("order:req:" + BUYER + ":req-1");
     }
 
+    @SuppressWarnings("unchecked")
+    private LambdaUpdateWrapper<Goods> capturedStockUpdate() {
+        ArgumentCaptor<Wrapper<Goods>> w = ArgumentCaptor.forClass(Wrapper.class);
+        verify(goodsMapper).update(w.capture());
+        return (LambdaUpdateWrapper<Goods>) w.getValue();
+    }
+
     @Test
-    void lastItemMovesGoodsToTrading() {
+    void deductsStockWithConditionalUpdate() {
         when(stockCache.tryDeduct(eq(GOODS), eq(2), any())).thenReturn(true);
         when(goodsMapper.selectById(GOODS)).thenReturn(goods(2));
-        when(goodsMapper.updateById(any(Goods.class))).thenReturn(1);
+        when(goodsMapper.update(any(Wrapper.class))).thenReturn(1);
 
         CreateResp r = service.create(BUYER, req(2, TradeMode.FACE));
 
-        ArgumentCaptor<Goods> upd = ArgumentCaptor.forClass(Goods.class);
-        verify(goodsMapper).updateById(upd.capture());
-        assertThat(upd.getValue().getStock()).isZero();
-        assertThat(upd.getValue().getVersion()).isEqualTo(3);
-        assertThat(upd.getValue().getStatus()).isEqualTo(GoodsStatus.TRADING);
+        LambdaUpdateWrapper<Goods> upd = capturedStockUpdate();
+        // 扣到 0 时进入交易中；IF 写在扣减前，比较的是扣减前的库存
+        assertThat(upd.getSqlSet()).isEqualTo("status = IF(stock = 2, " + GoodsStatus.TRADING
+                + ", status), stock = stock - 2, version = version + 1");
+        // 只在「在售且库存够」时扣：不靠版本号，不需要重试
+        assertThat(upd.getSqlSegment()).contains("status =").contains("stock >=").doesNotContain("version");
         ArgumentCaptor<TradeOrder> order = ArgumentCaptor.forClass(TradeOrder.class);
         verify(orderMapper).insert(order.capture());
         assertThat(order.getValue().getTotalAmount()).isEqualByComparingTo("600.00");
@@ -142,26 +159,23 @@ class OrderServiceCreateTest {
     }
 
     @Test
-    void stockLeftKeepsGoodsOnSale() {
+    void conditionalUpdateMissMeansStockNotEnough() {
         when(stockCache.tryDeduct(eq(GOODS), eq(1), any())).thenReturn(true);
-        when(goodsMapper.selectById(GOODS)).thenReturn(goods(3));
-        when(goodsMapper.updateById(any(Goods.class))).thenReturn(1);
-
-        service.create(BUYER, req(1, TradeMode.FACE));
-
-        ArgumentCaptor<Goods> upd = ArgumentCaptor.forClass(Goods.class);
-        verify(goodsMapper).updateById(upd.capture());
-        assertThat(upd.getValue().getStock()).isEqualTo(2);
-        assertThat(upd.getValue().getStatus()).isNull();
+        when(goodsMapper.selectById(GOODS)).thenReturn(goods(1));
+        when(goodsMapper.update(any(Wrapper.class))).thenReturn(0);
+        expect(ErrorCode.STOCK_NOT_ENOUGH, req(1, TradeMode.FACE));
+        verify(goodsMapper, times(1)).update(any(Wrapper.class));
+        verify(orderMapper, never()).insert(any(TradeOrder.class));
     }
 
     @Test
-    void optimisticLockConflictRetriesThreeTimes() {
+    void goodsTakenDownDuringOrderIsNotBuyable() {
         when(stockCache.tryDeduct(eq(GOODS), eq(1), any())).thenReturn(true);
-        when(goodsMapper.selectById(GOODS)).thenReturn(goods(3));
-        when(goodsMapper.updateById(any(Goods.class))).thenReturn(0);
-        expect(ErrorCode.CONFLICT, req(1, TradeMode.FACE));
-        verify(goodsMapper, times(3)).updateById(any(Goods.class));
+        Goods off = goods(1);
+        off.setStatus(GoodsStatus.OFF_SHELF);
+        when(goodsMapper.selectById(GOODS)).thenReturn(goods(1), off);
+        when(goodsMapper.update(any(Wrapper.class))).thenReturn(0);
+        expect(ErrorCode.GOODS_NOT_BUYABLE, req(1, TradeMode.FACE));
     }
 
     @Test
@@ -178,7 +192,7 @@ class OrderServiceCreateTest {
         when(props.pay()).thenReturn(pay("mock"));
         when(stockCache.tryDeduct(eq(GOODS), eq(1), any())).thenReturn(true);
         when(goodsMapper.selectById(GOODS)).thenReturn(goods(1));
-        when(goodsMapper.updateById(any(Goods.class))).thenReturn(1);
+        when(goodsMapper.update(any(Wrapper.class))).thenReturn(1);
         when(userService.require(SELLER)).thenReturn(user(SELLER, 59));
         expect(ErrorCode.TRADE_MODE_UNSUPPORTED, req(1, TradeMode.GUARANTEE));
         verify(orderMapper, never()).insert(any(TradeOrder.class));
@@ -207,5 +221,13 @@ class OrderServiceCreateTest {
 
         assertThat(r.orderNo()).isEqualTo("202611221200001");
         verify(stockCache, never()).tryDeduct(anyLong(), anyInt(), any());
+    }
+
+    @Test
+    void duplicateRequestBeforeCommitAsksToWait() {
+        when(ops.setIfAbsent(anyString(), eq("PENDING"), any(Duration.class))).thenReturn(false);
+        when(ops.get("order:req:" + BUYER + ":req-1")).thenReturn("9001");
+        // 订单 id 已写入但订单还查不到（未提交）：提示稍候，而不是空指针 500
+        expect(ErrorCode.CONFLICT, req(1, TradeMode.FACE));
     }
 }
