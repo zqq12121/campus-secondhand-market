@@ -50,7 +50,7 @@ Spring Boot 3.5 + MyBatis-Plus + Spring Security（JWT）+ MySQL 8 + Redis + Rab
    cd backend && set -a && source ../.env && set +a && mvn spring-boot:run
    ```
 
-- 接口文档（OpenAPI）：http://localhost:8080/swagger-ui.html
+- 接口文档（OpenAPI）：http://localhost:8080/swagger-ui.html（prod profile 下关闭）
 - `MAIL_ENABLED=false` 时，邮箱验证码只打印到后端日志（搜索 `[MAIL_DISABLED]`）。
 - 首次启动且库里没有管理员时，用 `ADMIN_INIT_USERNAME` / `ADMIN_INIT_PASSWORD` 创建超级管理员。
 - 前端联调：在 `frontend/` 下执行 `npm run dev:real`，`/api` 和 `/ws` 会代理到 8080。
@@ -92,6 +92,7 @@ set -a && source .env && set +a && docker compose --profile app up -d --build
 - 不带 `--profile app` 时只起 MySQL / Redis / RabbitMQ，和本地开发一致。
 - 前端镜像用 Nginx 托管用户端（`/`）和后台（`/admin/`），并把 `/api`、`/ws`、`/uploads` 转发到后端容器。访问地址为 `http://localhost:${WEB_PORT}`，默认端口 8088。
 - `.env` 里的 `PUBLIC_BASE_URL` 是浏览器访问站点的地址，图片地址和支付宝返回地址都由它生成。上传文件存放在 `uploads` 数据卷里。
+- 以上是开发/内网用法。生产部署（HTTPS、`prod` profile、启动自检、备份）叠加 `docker-compose.prod.yml`，见 [docs/上线部署.md](../docs/上线部署.md)。
 
 ### 支付模式
 
@@ -99,6 +100,7 @@ set -a && source .env && set +a && docker compose --profile app up -d --build
 | --- | --- |
 | `mock`（默认） | 本地模拟收银台 `/api/pay/mock/cashier`，点「确认支付」后走与支付宝通知相同的入账逻辑；退款直接成功。用于没有沙箱密钥时开发演示 |
 | `alipay` | 支付宝开放平台沙箱（电脑网站支付）。需在 `.env` 填 `ALIPAY_APP_ID`、`ALIPAY_PRIVATE_KEY`、`ALIPAY_PUBLIC_KEY` |
+| `disabled` | 关闭担保交易（`docker-compose.prod.yml` 的默认值）：发布与下单只允许面交，`GET /api/v1/common/config` 返回 `guaranteeEnabled=false`，前端隐藏担保入口 |
 
 支付宝异步通知需要公网可达的 `ALIPAY_NOTIFY_URL`。本地收不到通知时，前端从收银台返回后会轮询 `pay-status`，后端会主动查询支付宝做补偿；订单超时关闭前也会先查一次。
 

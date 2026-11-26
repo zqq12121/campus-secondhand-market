@@ -107,6 +107,8 @@ services:
     env_file: .env
     environment:
       BACKEND_BASE_URL: http://backend:8080
+      # env_file 只读 .env 文件；用插值让 shell 里导出的 key 也能传进来（shell 优先，其次 .env）
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       # 与 backend 保持一致：用户图片地址按这个前缀校验，再经 BACKEND_BASE_URL 内网读取
       UPLOAD_PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8088}/uploads
       MYSQL_HOST: mysql
