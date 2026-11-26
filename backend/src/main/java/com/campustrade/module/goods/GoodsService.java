@@ -420,6 +420,8 @@ public class GoodsService {
                     && req.originalPrice().compareTo(MAX_PRICE) <= 0, ErrorCode.PRICE_INVALID, "原价须不低于售价");
         }
         Biz.check(price.signum() != 0 || req.tradeMode() == TradeMode.FACE, ErrorCode.FREE_MUST_FACE);
+        Biz.check(req.tradeMode() == TradeMode.FACE || props.pay().guaranteeEnabled(),
+                ErrorCode.TRADE_MODE_UNSUPPORTED, "担保交易暂未开放，请选择仅面交");
         Biz.check(req.tradeMode() == TradeMode.FACE || seller.getCreditScore() >= 60, ErrorCode.GUARANTEE_CREDIT_LOW);
         Category c = commonService.enabledLeaf(req.categoryId());
         Biz.notNull(c, ErrorCode.CATEGORY_INVALID);

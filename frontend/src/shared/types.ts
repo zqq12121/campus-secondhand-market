@@ -34,6 +34,8 @@ export type CreditLevel = 'EXCELLENT' | 'GOOD' | 'FAIR' | 'POOR' | 'RESTRICTED'
 
 /* ---------- 公共 ---------- */
 export interface Campus { id: Id; name: string }
+/** 站点配置（GET /common/config） */
+export interface SiteConfig { schoolName: string; emailSuffix: string; guaranteeEnabled: boolean }
 export interface Category { id: Id; name: string; iconUrl?: string | null; children?: Category[] }
 export interface HomeData {
   banners: { id: Id; title: string; imageUrl: string; linkUrl: string | null }[]

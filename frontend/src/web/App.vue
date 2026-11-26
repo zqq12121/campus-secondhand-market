@@ -7,11 +7,13 @@ import TabBar from './components/TabBar.vue'
 import AssistantWidget from './assistant/AssistantWidget.vue'
 import { useAuthStore } from './stores/auth'
 import { useUnreadStore } from './stores/unread'
+import { useMetaStore } from './stores/meta'
 import { connect, disconnect, on, USE_MOCK } from './realtime'
 
 const route = useRoute()
 const auth = useAuthStore()
 const unread = useUnreadStore()
+const meta = useMetaStore()
 let timer: number | undefined
 
 // 手机端二级页面隐藏 Tab 栏：与原型一致，用 body.no-tabbar 控制。
@@ -33,6 +35,7 @@ watch(() => auth.loggedIn, (v) => {
 
 const offs: (() => void)[] = []
 onMounted(() => {
+  meta.load().catch(() => {})
   offs.push(on('notification', (e) => unread.set(e.unread)))
   offs.push(on('message', (e) => unread.set({ chat: e.totalUnread })))
 })

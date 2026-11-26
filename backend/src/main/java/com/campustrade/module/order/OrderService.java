@@ -107,6 +107,8 @@ public class OrderService {
     }
 
     private TradeOrder doCreate(long buyerId, CreateReq req) {
+        Biz.check(req.tradeMode() != TradeMode.GUARANTEE || props.pay().guaranteeEnabled(),
+                ErrorCode.TRADE_MODE_UNSUPPORTED, "担保交易暂未开放，请选择面交");
         User buyer = userService.require(buyerId);
         Biz.check(!AuthService.isBanned(buyer), ErrorCode.ACCOUNT_BANNED);
         String cancels = redis.opsForValue().get(cancelCountKey(buyerId));

@@ -127,7 +127,7 @@ const SORTS = [['DEFAULT', '综合'], ['NEWEST', '最新'], ['PRICE_ASC', '价�
         <div class="filter-row"><b>交易方式</b><div class="opts">
           <button class="chip" :class="{ active: !str('tradeMode') && !str('free') }" @click="setQuery({ tradeMode: undefined, free: undefined })">不限</button>
           <button class="chip" :class="{ active: str('tradeMode') === '1' }" @click="setQuery({ tradeMode: '1', free: undefined })">支持面交</button>
-          <button class="chip" :class="{ active: str('tradeMode') === '2' }" @click="setQuery({ tradeMode: '2', free: undefined })">支持担保</button>
+          <button v-if="meta.config.guaranteeEnabled" class="chip" :class="{ active: str('tradeMode') === '2' }" @click="setQuery({ tradeMode: '2', free: undefined })">支持担保</button>
           <button class="chip" :class="{ active: str('free') === '1' }" @click="setQuery({ free: '1', tradeMode: undefined })">免费送</button>
         </div></div>
         <div class="filter-row"><b>价格</b>

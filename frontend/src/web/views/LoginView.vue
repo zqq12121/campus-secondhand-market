@@ -9,14 +9,14 @@ import { authApi } from '../api'
 import { useAuthStore } from '../stores/auth'
 import { useMetaStore } from '../stores/meta'
 
-/** 登录 / 注册 / 找回密码（接口文档 3.1–3.5）。邮箱后缀固定 @wu.edu.cn，只让用户输入前缀。 */
-const SUFFIX = '@wu.edu.cn'
+/** 登录 / 注册 / 找回密码（接口文档 3.1–3.5）。邮箱后缀取站点配置（school 表），只让用户输入前缀。 */
 const PWD_RULE = /^(?=.*[A-Za-z])(?=.*\d).{8,20}$/
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const meta = useMetaStore()
+const SUFFIX = computed(() => meta.config.emailSuffix)
 
 const tab = ref<'login' | 'register' | 'reset'>('login')
 const loading = ref(false)
@@ -31,7 +31,7 @@ const countdown = ref(0)
 let timer: number | undefined
 
 const regPwdError = computed(() => (reg.password && !PWD_RULE.test(reg.password) ? '密码需 8–20 位，且同时包含字母和数字' : ''))
-const email = (prefix: string) => prefix.trim().replace(/@.*$/, '') + SUFFIX
+const email = (prefix: string) => prefix.trim().replace(/@.*$/, '') + SUFFIX.value
 
 onMounted(async () => {
   await meta.load()
@@ -125,7 +125,7 @@ async function doReset() {
         <ul>
           <li><AppIcon name="shield" />校园邮箱注册，人人实名在校</li>
           <li><AppIcon name="pin" />两校区就近面交</li>
-          <li><AppIcon name="wallet" />担保交易，确认收货后才打款</li>
+          <li v-if="meta.config.guaranteeEnabled"><AppIcon name="wallet" />担保交易，确认收货后才打款</li>
         </ul>
       </div>
       <p class="side-foot">遇到问题请联系平台管理员</p>

@@ -29,9 +29,12 @@ const subCategories = computed(() => meta.categories.find((c) => c.id === form.p
 const isFree = computed(() => form.price !== '' && Number(form.price) === 0)
 const credit = computed(() => auth.me?.creditScore ?? 80)
 const escrowDisabled = computed(() => isFree.value || credit.value < 60)
+const guaranteeEnabled = computed(() => meta.config.guaranteeEnabled)
 const upload = (f: File) => commonApi.upload(f, 'GOODS')
 
 watch(isFree, (free) => { if (free) form.tradeMode = 1 })
+// 担保未开放：编辑旧商品或助手草稿时也统一改成仅面交
+watch(() => [form.tradeMode, guaranteeEnabled.value], () => { if (!guaranteeEnabled.value) form.tradeMode = 1 })
 watch(() => form.parentCategoryId, () => {
   if (!subCategories.value.some((c) => c.id === form.categoryId)) form.categoryId = subCategories.value[0]?.id ?? ''
 })
@@ -163,15 +166,16 @@ async function save(draft: boolean) {
           <h3>交易方式</h3>
           <div class="radio-group">
             <button type="button" class="radio-card" :class="{ active: form.tradeMode === 1 }" @click="form.tradeMode = 1"><AppIcon name="pin" />仅面交</button>
-            <button type="button" class="radio-card" :class="{ active: form.tradeMode === 2 }" :disabled="escrowDisabled" @click="form.tradeMode = 2"><AppIcon name="shield" />仅担保</button>
-            <button type="button" class="radio-card" :class="{ active: form.tradeMode === 3 }" :disabled="escrowDisabled" @click="form.tradeMode = 3"><AppIcon name="check" />面交和担保都支持</button>
+            <button v-if="guaranteeEnabled" type="button" class="radio-card" :class="{ active: form.tradeMode === 2 }" :disabled="escrowDisabled" @click="form.tradeMode = 2"><AppIcon name="shield" />仅担保</button>
+            <button v-if="guaranteeEnabled" type="button" class="radio-card" :class="{ active: form.tradeMode === 3 }" :disabled="escrowDisabled" @click="form.tradeMode = 3"><AppIcon name="check" />面交和担保都支持</button>
           </div>
           <div class="grid-2">
             <div class="field"><label for="p-campus">面交校区</label>
               <select id="p-campus" v-model="form.campusId" class="select"><option v-for="c in meta.campuses" :key="c.id" :value="c.id">{{ c.name }}</option></select></div>
             <div class="field"><label for="p-loc">面交地点</label><el-input id="p-loc" v-model="form.location" maxlength="64" placeholder="如：图书馆东门" /></div>
           </div>
-          <div v-if="credit < 60" class="alert alert-warn"><AppIcon name="alert" /><span>你的信用分为 {{ credit }}，低于 60 不能使用担保交易。</span></div>
+          <div v-if="!guaranteeEnabled" class="alert alert-info"><AppIcon name="pin" /><span>平台目前只支持当面交易，担保交易暂未开放。</span></div>
+          <div v-else-if="credit < 60" class="alert alert-warn"><AppIcon name="alert" /><span>你的信用分为 {{ credit }}，低于 60 不能使用担保交易。</span></div>
           <div v-else class="alert alert-info"><AppIcon name="shield" /><span>担保交易：买家付款到平台，你交货、买家确认收货后，钱进入你的平台余额。</span></div>
         </div>
 

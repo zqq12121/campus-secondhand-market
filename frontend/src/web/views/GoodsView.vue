@@ -14,11 +14,13 @@ import GoodsCard from '../components/GoodsCard.vue'
 import ReportDialog from '../components/ReportDialog.vue'
 import { chatApi, goodsApi } from '../api'
 import { useAuthStore } from '../stores/auth'
+import { useMetaStore } from '../stores/meta'
 
 /** 商品详情（接口文档 5.3）。购买按钮是否可用完全按后端 canBuy / cannotBuyReason 决定。 */
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const meta = useMetaStore()
 const id = route.params.id as string
 
 const g = ref<GoodsDetail | null>(null)
@@ -97,7 +99,7 @@ async function offShelf() {
 
         <div class="stack">
           <div class="row" style="flex-wrap: wrap">
-            <span v-if="g.tradeMode !== 1" class="tag tag-green"><AppIcon name="shield" size="sm" />支持担保</span>
+            <span v-if="g.tradeMode !== 1 && meta.config.guaranteeEnabled" class="tag tag-green"><AppIcon name="shield" size="sm" />支持担保</span>
             <span v-if="g.tradeMode !== 2" class="tag tag-blue">支持面交</span>
             <span class="tag">{{ CONDITION[g.conditionLevel] }}</span>
             <StatusTag v-if="g.status !== 2" :text="GOODS_STATUS[g.status]" :tone="GOODS_STATUS_TONE[g.status]" />
@@ -111,7 +113,7 @@ async function offShelf() {
           <div v-if="g.isMine && g.auditRemark" class="alert alert-danger"><AppIcon name="alert" /><span>{{ g.auditRemark }}</span></div>
           <div class="divider" style="margin: 4px 0" />
           <dl class="kv">
-            <dt>交易方式</dt><dd>{{ g.tradeMode === 1 ? '仅面交' : g.tradeMode === 2 ? '仅担保交易' : '面交 / 担保交易' }}<span v-if="g.tradeMode !== 1" class="subtle">（担保：付款到平台，确认收货后打款给卖家）</span></dd>
+            <dt>交易方式</dt><dd>{{ g.tradeMode === 1 || (!meta.config.guaranteeEnabled && g.tradeMode === 3) ? '仅面交' : g.tradeMode === 2 ? '仅担保交易' : '面交 / 担保交易' }}<span v-if="g.tradeMode !== 1 && meta.config.guaranteeEnabled" class="subtle">（担保：付款到平台，确认收货后打款给卖家）</span></dd>
             <dt>面交地点</dt><dd><span class="row"><AppIcon name="pin" size="sm" />{{ g.campusName }}{{ g.location ? ` · ${g.location}` : '' }}</span></dd>
             <dt>库存</dt><dd>{{ g.stock }} 件</dd>
           </dl>

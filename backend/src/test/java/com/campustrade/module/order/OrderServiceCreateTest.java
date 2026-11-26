@@ -6,6 +6,7 @@ import com.campustrade.common.Consts.OrderStatus;
 import com.campustrade.common.Consts.TradeMode;
 import com.campustrade.common.Consts.UserStatus;
 import com.campustrade.common.ErrorCode;
+import com.campustrade.config.AppProperties;
 import com.campustrade.infra.StockCache;
 import com.campustrade.module.goods.entity.Goods;
 import com.campustrade.module.goods.mapper.GoodsMapper;
@@ -63,6 +64,8 @@ class OrderServiceCreateTest {
     private ValueOperations<String, String> ops;
     @Mock
     private StockCache stockCache;
+    @Mock
+    private AppProperties props;
     @InjectMocks
     private OrderService service;
 
@@ -97,6 +100,10 @@ class OrderServiceCreateTest {
 
     private static CreateReq req(int quantity, int mode) {
         return new CreateReq(GOODS, quantity, mode, "req-1");
+    }
+
+    private static AppProperties.Pay pay(String mode) {
+        return new AppProperties.Pay(mode, null, null, null, null, null, null);
     }
 
     private void expect(ErrorCode code, CreateReq req) {
@@ -168,11 +175,20 @@ class OrderServiceCreateTest {
 
     @Test
     void guaranteeNeedsSellerCreditAtLeast60() {
+        when(props.pay()).thenReturn(pay("mock"));
         when(stockCache.tryDeduct(eq(GOODS), eq(1), any())).thenReturn(true);
         when(goodsMapper.selectById(GOODS)).thenReturn(goods(1));
         when(goodsMapper.updateById(any(Goods.class))).thenReturn(1);
         when(userService.require(SELLER)).thenReturn(user(SELLER, 59));
         expect(ErrorCode.TRADE_MODE_UNSUPPORTED, req(1, TradeMode.GUARANTEE));
+        verify(orderMapper, never()).insert(any(TradeOrder.class));
+    }
+
+    @Test
+    void guaranteeRejectedWhenPaymentDisabled() {
+        when(props.pay()).thenReturn(pay("disabled"));
+        expect(ErrorCode.TRADE_MODE_UNSUPPORTED, req(1, TradeMode.GUARANTEE));
+        verify(stockCache, never()).tryDeduct(anyLong(), anyInt(), any());
         verify(orderMapper, never()).insert(any(TradeOrder.class));
     }
 

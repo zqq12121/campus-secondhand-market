@@ -1,0 +1,42 @@
+# 生产 HTTPS 站点。nginx 镜像启动时用 envsubst 把 ${DOMAIN} 替换后写到 /etc/nginx/conf.d/
+# 证书由 certbot 放在 /etc/letsencrypt/live/${DOMAIN}/（首次签发见 deploy/init-cert.sh）
+map $scheme $hsts { https "max-age=31536000"; default ""; }
+gzip on;
+gzip_types text/css application/javascript application/json image/svg+xml;
+gzip_min_length 1024;
+
+# 80：只做证书续期校验和跳转 HTTPS
+server {
+    listen 80;
+    server_name ${DOMAIN};
+    server_tokens off;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+
+    include /etc/nginx/snippets/app-locations.conf;
+}
+
+# 用 IP 或未知域名访问时直接断开，避免被扫描器当成默认站点
+server {
+    listen 443 ssl default_server;
+    ssl_reject_handshake on;
+}

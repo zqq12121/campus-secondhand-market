@@ -151,6 +151,7 @@ function orderDetail(o: OrderRow, uid: string) {
 /* ---------------- 路由 ---------------- */
 export function registerUserRoutes() {
   /* 2. 公共 */
+  get('/common/config', 'public', () => ({ schoolName: school.name, emailSuffix: school.emailSuffix, guaranteeEnabled: true }))
   get('/common/campuses', 'public', () => campuses)
   get('/common/categories', 'public', () => categories.filter((c) => c.parentId === '0' && c.enabled).map((c) => ({
     id: c.id, name: c.name, iconUrl: c.iconUrl, children: categories.filter((x) => x.parentId === c.id && x.enabled).map((x) => ({ id: x.id, name: x.name })),
