@@ -22,8 +22,8 @@ app/
 ├── guard.py           # 规则式安全防护：注入检测、工具结果过滤、输出检查
 ├── redis_lock.py      # Redis 分布式锁（Lua 校验 value 再续期 / 释放）与选主执行
 ├── rag/
-│   ├── embedder.py    # 本地 bge-small-zh
-│   ├── reranker.py    # 本地 bge-reranker-base（cross-encoder）
+│   ├── embedder.py    # bge-small-zh：本地模型或外置 TEI 服务
+│   ├── reranker.py    # bge-reranker-base（cross-encoder）：本地模型或外置 TEI 服务
 │   ├── goods_index.py # MySQL 增量同步 → Redis 向量索引；向量 + 关键词 RRF 混合检索，再重排
 │   └── rules_index.py # knowledge/*.md + 上线公告 → 按二级标题切片 → Redis 向量索引（蓝绿重建）；召回 3 倍再重排
 └── graph/
@@ -150,6 +150,25 @@ docker exec -i campus-trade-mysql sh -c 'mysql --default-character-set=utf8mb4 -
 | 规则：15 个评测问题 | 每次约 380 ms（只用向量约 12 ms） | 第一条命中：只用向量 14/15，加重排 15/15；前三条都是 15/15 |
 
 规则的命中判定方式：取评测集里的关键事实词，看是否出现在检索到的片段中。这只是粗判。
+
+## 外置 embedding / 重排序服务
+
+默认在进程内加载 `bge-small-zh-v1.5` 和 `bge-reranker-base`，两个模型加起来约 1.2 GB。也可以拆成独立的 [text-embeddings-inference](https://github.com/huggingface/text-embeddings-inference)（TEI）服务，ai-service 通过 HTTP 调用：
+
+```bash
+docker run -d --name tei-embed -p 8091:80 -v hf-cache:/data \
+  ghcr.io/huggingface/text-embeddings-inference:cpu-1.8 --model-id BAAI/bge-small-zh-v1.5
+docker run -d --name tei-rerank -p 8092:80 -v hf-cache:/data \
+  ghcr.io/huggingface/text-embeddings-inference:cpu-1.8 --model-id BAAI/bge-reranker-base
+```
+
+然后在 `.env` 里配置 `EMBEDDING_SERVICE_URL=http://localhost:8091`、`RERANK_SERVICE_URL=http://localhost:8092`（compose 内部用容器名，如 `http://tei-embed`）。不配置时仍用本地模型。
+
+- embedding 调 `POST /embed`（`inputs`、`normalize: true`、`truncate: true`），文档按 32 条一批发送（TEI 默认的 `--max-client-batch-size`）。向量维度在启动时调用一次 `/embed` 获取。query 加检索指令前缀，行为与本地实现一致。
+- 重排序调 `POST /rerank`。TEI 按分数降序返回 `[{index, score}]`，这里按 `index` 还原成与候选顺序对齐的分数。调用失败时沿用原有的降级逻辑：商品退回 RRF 顺序，规则退回向量顺序。
+- 请求超时 10 秒。embedding 服务在启动时连不上会直接启动失败，与本地模型加载失败的行为一致。
+- 本地和 TEI 用的是同一个模型时，向量可以通用，切换时不需要重建索引。
+- 两个服务都外置后，进程里不再需要 sentence-transformers 和 torch。这次没有改依赖结构（Dockerfile 仍会安装 torch）；如果确定只用外置服务，可以考虑把这两个依赖移到可选组，镜像能小 1 GB 以上。
 
 ## 安全防护
 

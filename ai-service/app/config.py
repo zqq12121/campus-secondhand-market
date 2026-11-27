@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     rules_sync_lock_key: str = "ai:leader:rules_sync"
     # 本地重排序模型（cross-encoder），留空则不重排、直接用 RRF / 向量顺序
     rerank_model: str = "BAAI/bge-reranker-base"
+    # 配了就通过 HTTP 调用外置的 text-embeddings-inference（TEI）服务，不在进程内加载模型；不配用上面的本地模型
+    embedding_service_url: str = ""
+    rerank_service_url: str = ""
 
     # agent
     ai_max_tool_calls: int = 8
