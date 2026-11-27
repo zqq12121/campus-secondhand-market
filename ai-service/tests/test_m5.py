@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 from langchain_core.messages import AIMessage
+from redisvl.query import VectorQuery
 
 from app.graph.builder import PROMPT_SHINGLES, SYSTEM_PROMPT
 from app.graph.tools import get_goods_detail
@@ -122,10 +123,11 @@ async def test_chat_trace_log_has_every_llm_and_tool_call(caplog: pytest.LogCapt
               ai_price_input_per_m=2.0, ai_price_output_per_m=8.0)
     with caplog.at_level(logging.INFO, logger="ai-service"):
         async with client() as c:
-            await c.post("/api/v1/ai/chat", json={"message": "台灯"}, headers=H)
+            await c.post("/api/v1/ai/chat", json={"message": "平时用的台灯坏了"}, headers=H)
     line = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("chat_trace "))
     trace = json.loads(line.removeprefix("chat_trace "))
     assert [c["node"] for c in trace["llm"]] == ["agent", "agent", "save_memory"]
+    assert trace["memory_skipped"] is False
     assert [t["name"] for t in trace["tools"]] == ["get_goods_detail"]
     assert trace["input_tokens"] == 30 and trace["output_tokens"] == 15
     assert trace["cost"] == pytest.approx((30 * 2.0 + 15 * 8.0) / 1_000_000)
@@ -183,13 +185,29 @@ class _RulesQuery:
 
     async def query(self, q: Any) -> list[dict[str, str]]:
         self.num_results.append(q._num_results)
-        return self.hits
+        return self.hits if isinstance(q, VectorQuery) else []
+
+
+class _PointerRedis:
+    async def get(self, key: str) -> bytes:
+        return b"v1"
 
 
 async def test_rules_search_recalls_more_then_reranks() -> None:
-    hits = [{"title": f"规则 > 第{i}条", "content": "退款" if i == 4 else "其他"} for i in range(6)]
-    rules = object.__new__(RulesIndex)
-    rules._embedder, rules._reranker, rules.index = _Embedder(), FakeReranker("退款"), _RulesQuery(hits)
+    hits = [{"chunk_id": f"c{i}", "title": f"规则 > 第{i}条", "content": "退款" if i == 4 else "其他"} for i in range(6)]
+    index = _RulesQuery(hits)
+    rules = RulesIndex(_PointerRedis(), _Embedder(), FakeJava(), reranker=FakeReranker("退款"))
+    rules._indexes["ai_rules_v1"] = index
     result = await rules.search("能退款吗", top_k=2)
-    assert rules.index.num_results == [6]  # top_k × 3
+    assert index.num_results == [6, 6]  # 向量、全文各召回 top_k × 3
     assert [r["source"] for r in result] == ["规则 > 第4条", "规则 > 第0条"]
+
+
+async def test_chat_trace_records_memory_skipped(caplog: pytest.LogCaptureFixture) -> None:
+    setup_app([AIMessage("你好")])
+    with caplog.at_level(logging.INFO, logger="ai-service"):
+        async with client() as c:
+            await c.post("/api/v1/ai/chat", json={"message": "有台灯吗"}, headers=H)
+    line = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("chat_trace "))
+    trace = json.loads(line.removeprefix("chat_trace "))
+    assert trace["memory_skipped"] is True and [c["node"] for c in trace["llm"]] == ["agent"]

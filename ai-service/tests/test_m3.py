@@ -3,6 +3,7 @@ import json
 from typing import Any
 
 import httpx
+from fakeredis import FakeAsyncRedis
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.store.memory import InMemoryStore
@@ -10,7 +11,7 @@ from langgraph.store.memory import InMemoryStore
 from app.graph.builder import build_graph
 from app.graph.drafts import reference_price
 from app.main import AppState, app
-from tests.fakes import FakeIndex, FakeJava, FakeRedis, ScriptedModel, call, goods, settings
+from tests.fakes import FakeIndex, FakeJava, ScriptedModel, call, goods, settings
 
 H = {"Authorization": "Bearer good"}
 UPLOAD = "http://localhost:8080/uploads"
@@ -21,7 +22,7 @@ def setup(script: list, java: FakeJava | None = None) -> tuple[FakeJava, Scripte
     java = java or FakeJava()
     model = ScriptedModel(script=script)
     store = InMemoryStore()
-    app.state.ai = AppState(s, FakeRedis(), java, FakeIndex(), build_graph(model, s, InMemorySaver(), store), store)
+    app.state.ai = AppState(s, FakeAsyncRedis(), java, FakeIndex(), build_graph(model, s, InMemorySaver(), store), store)
     return java, model
 
 

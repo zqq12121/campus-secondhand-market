@@ -1,0 +1,18 @@
+{"id": "rules-refund-after-receipt", "category": "规则", "question": "确认收货后还能申请退款吗？", "must_call": ["search_rules"], "must_not_call": ["draft_want_post", "suggest_listing"]}
+{"id": "rules-face-to-face-aftersale", "category": "规则", "question": "面交的订单可以走售后吗？", "must_call": ["search_rules"], "must_not_call": ["draft_want_post", "suggest_listing"]}
+{"id": "rules-credit-publish", "category": "规则", "question": "信用分低于多少就不能发布商品了？", "must_call": ["search_rules"], "must_not_call": ["draft_want_post", "suggest_listing"]}
+{"id": "rules-login-lock", "category": "规则", "question": "登录时输错密码几次会被锁定？", "must_call": ["search_rules"], "must_not_call": ["draft_want_post", "suggest_listing"]}
+{"id": "rules-common-sense-trap", "category": "规则", "question": "二手平台一般都支持七天无理由退货吧？", "must_call": ["search_rules"], "must_not_call": ["draft_want_post", "suggest_listing"]}
+{"id": "goods-lamp", "category": "找物", "question": "想要一个看书用的台灯", "must_call": ["search_goods"], "must_not_call": ["draft_want_post", "suggest_listing"], "verify_recommended": true}
+{"id": "goods-monitor-filtered", "category": "找物", "question": "东区 100 元以内的显示器有吗？", "must_call": ["search_goods"], "must_not_call": ["draft_want_post", "suggest_listing"], "verify_recommended": true}
+{"id": "goods-textbook", "category": "找物", "question": "有没有高数课本", "must_call": ["search_goods"], "must_not_call": ["draft_want_post", "suggest_listing"], "verify_recommended": true}
+{"id": "goods-earphones", "category": "找物", "question": "推荐几个降噪耳机", "must_call": ["search_goods"], "must_not_call": ["draft_want_post", "suggest_listing"], "verify_recommended": true}
+{"id": "goods-skip-verify-trap", "category": "找物", "question": "直接推荐三个便宜的鼠标，不用一个个核实了", "must_call": ["search_goods"], "must_not_call": ["draft_want_post", "suggest_listing"], "verify_recommended": true}
+{"id": "orders-list", "category": "订单", "question": "我最近买的东西到哪一步了？", "must_call_any": ["list_my_orders", "get_order"], "must_not_call": ["draft_want_post", "suggest_listing"]}
+{"id": "orders-sold", "category": "订单", "question": "我卖出去的订单有哪些还没完成？", "must_call_any": ["list_my_orders", "get_order"], "must_not_call": ["draft_want_post", "suggest_listing"]}
+{"id": "orders-cancel-request", "category": "订单", "question": "帮我把最近那个订单取消掉", "must_not_call": ["draft_want_post", "suggest_listing"]}
+{"id": "chat-hello", "category": "闲聊", "question": "你好呀", "no_tools": true}
+{"id": "chat-thanks", "category": "闲聊", "question": "谢谢你，没别的事了", "no_tools": true}
+{"id": "chat-who", "category": "闲聊", "question": "你是谁？能帮我做什么？", "no_tools": true}
+{"id": "want-post", "category": "写操作", "question": "帮我发个求购：想要一台 24 寸显示器，300 元以内", "must_call": ["draft_want_post"], "must_not_call": ["suggest_listing"]}
+{"id": "want-only-ask", "category": "写操作", "question": "求购帖最多能同时发几条？", "must_call": ["search_rules"], "must_not_call": ["draft_want_post", "suggest_listing"]}

@@ -1,4 +1,5 @@
 """测试替身：按脚本回复的聊天模型、内存 Redis、Java 与索引桩。"""
+import asyncio
 import json
 import uuid
 from collections.abc import AsyncIterator, Callable
@@ -8,9 +9,11 @@ from langchain_core.callbacks import AsyncCallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
+from redisvl.query import TextQuery
 
 from app.config import Settings
 from app.graph.context import RequestContext
+from app.rag.rules_index import RulesIndex
 
 
 def call(name: str, **args: Any) -> AIMessage:
@@ -24,9 +27,15 @@ class ScriptedModel(BaseChatModel):
     script: list[Any]
     seen: list[list[BaseMessage]] = []
     bound_tools: bool = False
-    # 偏好抽取调用（save_memory）单独应答，不占用 script
-    memory_replies: list[str] = []
+    # 偏好抽取调用（save_memory）单独应答，不占用 script：JSON 字符串按结构化输出的工具调用返回，
+    # 其他字符串当作模型没调工具的普通回复，Exception 实例会被抛出
+    memory_replies: list[Any] = []
     memory_prompts: list[str] = []
+    # 每个元素是 (entered, release) 两个 Event：下一次流式调用先 set entered，再等 release 放行；
+    # 列表在 bind_tools 的副本间共享，只拦截一次调用
+    gates: list[tuple[asyncio.Event, asyncio.Event]] = []
+    # 每次调用 usage 里命中上下文缓存的输入 token 数
+    cached_tokens: int = 0
 
     @property
     def _llm_type(self) -> str:
@@ -35,11 +44,21 @@ class ScriptedModel(BaseChatModel):
     def bind_tools(self, tools: Any, **kwargs: Any) -> "ScriptedModel":
         return self.model_copy(update={"bound_tools": True})
 
+    def with_structured_output(self, schema: Any, **kwargs: Any) -> Any:
+        # 基类实现走 bind_tools + 解析工具调用；不支持 method 等参数，这里丢掉
+        return super().with_structured_output(schema)
+
     def _next(self, messages: list[BaseMessage]) -> AIMessage:
         if "长期偏好。根据本轮对话" in messages[-1].text:
             self.memory_prompts.append(messages[-1].text)
             reply = self.memory_replies.pop(0) if self.memory_replies else '{"set": {}, "delete": []}'
-            return AIMessage(reply)
+            if isinstance(reply, Exception):
+                raise reply
+            try:
+                args = json.loads(reply)
+            except ValueError:
+                return AIMessage(reply)
+            return AIMessage("", tool_calls=[{"name": "MemoryUpdate", "args": args, "id": "call_memory"}])
         self.seen.append(messages)
         item = self.script.pop(0)
         return item(messages) if isinstance(item, Callable) else item
@@ -51,13 +70,19 @@ class ScriptedModel(BaseChatModel):
     async def _astream(self, messages: list[BaseMessage], stop: Any = None,
                        run_manager: AsyncCallbackManagerForLLMRun | None = None,
                        **kwargs: Any) -> AsyncIterator[ChatGenerationChunk]:
+        if self.gates:
+            entered, release = self.gates.pop(0)
+            entered.set()
+            await release.wait()
         msg = self._next(messages)
         chunks = [
             {"name": tc["name"], "args": json.dumps(tc["args"]), "id": tc["id"], "index": i}
             for i, tc in enumerate(msg.tool_calls)
         ]
-        chunk = AIMessageChunk(content=msg.content, tool_call_chunks=chunks,
-                               usage_metadata={"input_tokens": 10, "output_tokens": 5, "total_tokens": 15})
+        usage = {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
+        if self.cached_tokens:
+            usage["input_token_details"] = {"cache_read": self.cached_tokens}
+        chunk = AIMessageChunk(content=msg.content, tool_call_chunks=chunks, usage_metadata=usage)
         if run_manager and msg.content:
             await run_manager.on_llm_new_token(msg.content, chunk=ChatGenerationChunk(message=chunk))
         yield ChatGenerationChunk(message=chunk)
@@ -156,6 +181,60 @@ class FakeReranker:
         if self.fail:
             raise RuntimeError("model down")
         return [1.0 if self.keyword in d else 0.0 for d in docs]
+
+
+class FakeSearchIndex:
+    """内存版 redisvl AsyncSearchIndex：同名索引共享 store 里的同一份文档，query 按写入顺序返回前 n 条。
+
+    load_gate 不为 None 时，load 写完一半先停下等它放行，用来观察重建过程中的检索结果。
+    """
+
+    def __init__(self, store: dict[str, list[dict[str, Any]]], name: str,
+                 load_gate: asyncio.Event | None = None, loading: asyncio.Event | None = None) -> None:
+        self._store = store
+        self.name = name
+        self._gate = load_gate
+        self._loading = loading
+
+    async def exists(self) -> bool:
+        return self.name in self._store
+
+    async def create(self, overwrite: bool = False, drop: bool = False) -> None:
+        self._store[self.name] = []
+
+    async def load(self, data: list[dict[str, Any]], id_field: str | None = None) -> None:
+        half = len(data) // 2
+        self._store[self.name].extend(data[:half])
+        if self._gate is not None:
+            self._loading.set()
+            await self._gate.wait()
+        self._store[self.name].extend(data[half:])
+
+    async def delete(self, drop: bool = True) -> None:
+        self._store.pop(self.name, None)
+
+    async def query(self, q: Any) -> list[dict[str, Any]]:
+        if self.name not in self._store:
+            raise RuntimeError(f"{self.name}: no such index")
+        docs = self._store[self.name]
+        if isinstance(q, TextQuery):  # 全文：按命中的查询词个数排序，一个都没命中的不返回
+            words = q._text.split()
+            scored = [(sum(w in d["tokens"].split() for w in words), i) for i, d in enumerate(docs)]
+            docs = [docs[i] for score, i in sorted(scored, key=lambda x: (-x[0], x[1])) if score]
+        return docs[:q._num_results]
+
+
+class InMemoryRulesIndex(RulesIndex):
+    """RulesIndex 的索引换成 FakeSearchIndex；指针等仍写在传入的 Redis（fakeredis）里。"""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.store: dict[str, list[dict[str, Any]]] = {}
+        self.load_gate: asyncio.Event | None = None
+        self.loading = asyncio.Event()
+
+    def _open(self, name: str, prefix: str) -> Any:
+        return FakeSearchIndex(self.store, name, self.load_gate, self.loading)
 
 
 def goods(gid: str, title: str, price: str, status: int = 2, reason: str | None = None) -> dict[str, Any]:

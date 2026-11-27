@@ -6,11 +6,15 @@ requires-python = ">=3.11,<3.14"
 dependencies = [
     "fastapi==0.165.0",
     "httpx==0.28.1",
+    "jieba==0.42.1",
     "langchain-core==1.8.4",
     "langchain-deepseek==1.2.1",
+    "langchain-openai==1.8.5",
     "langfuse==5.2.0",
     "langgraph==1.2.24",
     "langgraph-checkpoint-redis==0.6.0",
+    "mcp==2.3.0",
+    "prometheus-client==0.26.0",
     "pydantic-settings==2.16.3",
     "pymysql==1.2.4",
     "redis==8.1.0",
@@ -24,9 +28,12 @@ dependencies = [
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+# jieba 0.42.1 源码里的正则转义写法在新 Python 上报 DeprecationWarning，与本项目无关
+filterwarnings = ["ignore:invalid escape sequence:DeprecationWarning"]
 
 [dependency-groups]
 dev = [
+    "fakeredis[lua]==2.41.0",
     "pytest==9.2.0",
     "pytest-asyncio==1.5.0",
 ]

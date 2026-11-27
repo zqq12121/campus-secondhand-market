@@ -1,13 +1,14 @@
 import json
 
 import httpx
+from fakeredis import FakeAsyncRedis
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.store.memory import InMemoryStore
 
 from app.graph.builder import build_graph
 from app.main import AppState, app
-from tests.fakes import FakeIndex, FakeJava, FakeRedis, ScriptedModel, call, goods, settings
+from tests.fakes import FakeIndex, FakeJava, ScriptedModel, call, goods, settings
 
 
 def setup_app(script: list, **overrides: object) -> FakeJava:
@@ -15,7 +16,7 @@ def setup_app(script: list, **overrides: object) -> FakeJava:
     java = FakeJava({"g1": goods("g1", "台灯", "15.00"), "g2": goods("g2", "旧台灯", "5.00", reason="BLOCKED")})
     store = InMemoryStore()
     graph = build_graph(ScriptedModel(script=script), s, InMemorySaver(), store)
-    app.state.ai = AppState(s, FakeRedis(), java, FakeIndex(), graph, store)
+    app.state.ai = AppState(s, FakeAsyncRedis(), java, FakeIndex(), graph, store)
     return java
 
 
@@ -54,8 +55,8 @@ async def test_stream_emits_tools_goods_tokens_and_done() -> None:
     assert goods_events == [[{"id": "g1", "title": "台灯", "price": "15.00", "conditionLevel": 3,
                               "campusName": "东区", "coverUrl": "/uploads/g1.jpg"}]]  # 被拉黑的 g2 不推卡片
     assert "".join(d for e, d in events if e == "token") == "我查一下。\n\n推荐台灯 g1。"
-    # 3 次 agent 调用 + 1 次偏好抽取，每次 5
-    assert names[-1] == "done" and events[-1][1]["usage"]["output_tokens"] == 20
+    # 3 次 agent 调用，每次 5；普通找物消息不触发偏好抽取
+    assert names[-1] == "done" and events[-1][1]["usage"]["output_tokens"] == 15
 
 
 async def test_conversation_continues_with_same_id() -> None:
@@ -66,8 +67,8 @@ async def test_conversation_continues_with_same_id() -> None:
         conv = first[-1][1]["conversationId"]
         second = parse_sse((await c.post("/api/v1/ai/chat", json={"message": "again", "conversationId": conv},
                                          headers=h)).text)
-    # usage 含偏好抽取那次调用
-    assert second[-1] == ("done", {"conversationId": conv, "usage": {"input_tokens": 20, "output_tokens": 10},
+    # 「again」没有偏好信号词，usage 只有 agent 那次调用
+    assert second[-1] == ("done", {"conversationId": conv, "usage": {"input_tokens": 10, "output_tokens": 5},
                                        "pending": False})
     state = await app.state.ai.graph.aget_state({"configurable": {"thread_id": f"7:{conv}"}})
     assert [m.content for m in state.values["messages"]] == ["hi", "你好", "again", "还记得"]

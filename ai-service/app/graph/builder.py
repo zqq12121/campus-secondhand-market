@@ -5,14 +5,15 @@ START → load_memory → prepare → agent ⇄ tools → output_guard → save_
   prepare：     历史过长时把旧消息压缩成摘要（短期记忆的长度控制）
   agent：       DeepSeek + 工具；本轮工具调用达上限后不再给工具，强制作答
   output_guard：检查最终回复（提示词泄露、手机号 / 身份证号），有问题就按原 id 替换这条消息
-  save_memory： 从本轮对话抽取偏好写回 Store
+  save_memory： 用户消息含偏好信号词时，从本轮对话抽取偏好写回 Store
 """
 import logging
 
+import openai
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import (AIMessage, AnyMessage, HumanMessage, RemoveMessage, SystemMessage,
                                      ToolMessage)
-from langchain_core.runnables import RunnableConfig
+from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -22,9 +23,11 @@ from langgraph.store.base import BaseStore
 from app.config import Settings
 from app.graph.context import RequestContext, get_ctx
 from app.graph.images import prepare_for_model
-from app.graph.memory import extract_and_save, format_profile, load_profile
+from app.graph.memory import extract_and_save, format_profile, load_profile, memory_extractor, should_extract
 from app.graph.tools import TOOLS
 from app.guard import check_output, shingles
+from app.metrics import GUARD_TRIGGERS
+from app.observability import FALLBACK_TAG
 
 log = logging.getLogger(__name__)
 
@@ -77,10 +80,21 @@ SUMMARY_PROMPT = """把下面的对话压缩成一段不超过 300 字的中文�
 
 PROMPT_SHINGLES = shingles(SYSTEM_PROMPT)
 
+# 只有下游故障才切备用模型：超时 / 连接失败、429、5xx。参数错误、鉴权失败换个模型也没用，直接报错
+FALLBACK_ERRORS = (openai.APIConnectionError, openai.RateLimitError, openai.InternalServerError)
+
+
+def with_fallback(primary: Runnable, fallback: Runnable | None) -> Runnable:
+    if fallback is None:
+        return primary
+    return primary.with_fallbacks([fallback.with_config(tags=[FALLBACK_TAG])], exceptions_to_handle=FALLBACK_ERRORS)
+
 
 class State(MessagesState):
     summary: str
     profile: dict[str, str]
+    # 本轮 save_memory 是否跳过了抽取，写进 chat_trace
+    memory_skipped: bool
 
 
 def _format_ctx(ctx: RequestContext, summary: str, profile: dict[str, str]) -> str:
@@ -119,8 +133,12 @@ def split_for_summary(messages: list[AnyMessage], max_messages: int, keep: int) 
 
 
 def build_graph(llm: BaseChatModel, settings: Settings, checkpointer: BaseCheckpointSaver | None,
-                store: BaseStore | None = None) -> CompiledStateGraph:
-    llm_with_tools = llm.bind_tools(TOOLS)
+                store: BaseStore | None = None, fallback_llm: BaseChatModel | None = None) -> CompiledStateGraph:
+    # 主、备模型分别 bind_tools 再组合：降级后的模型同样能调用工具
+    llm_with_tools = with_fallback(llm.bind_tools(TOOLS), fallback_llm.bind_tools(TOOLS) if fallback_llm else None)
+    # 摘要压缩、工具次数到上限后的强制作答用不带工具的模型，偏好抽取用结构化输出，也都要能降级
+    plain_llm = with_fallback(llm, fallback_llm)
+    extractor = with_fallback(memory_extractor(llm), memory_extractor(fallback_llm) if fallback_llm else None)
 
     async def load_memory(state: State, config: RunnableConfig, *, store: BaseStore) -> dict:
         return {"profile": await load_profile(store, get_ctx(config).user["id"])}
@@ -133,7 +151,7 @@ def build_graph(llm: BaseChatModel, settings: Settings, checkpointer: BaseCheckp
         old = messages[:cut]
         dialogue = "\n".join(f"{m.type}: {m.text}" for m in old if m.text)
         previous = f"已有摘要：{state['summary']}" if state.get("summary") else ""
-        result = await llm.ainvoke([HumanMessage(SUMMARY_PROMPT.format(previous=previous, dialogue=dialogue))])
+        result = await plain_llm.ainvoke([HumanMessage(SUMMARY_PROMPT.format(previous=previous, dialogue=dialogue))])
         return {"summary": result.text, "messages": [RemoveMessage(id=m.id) for m in old]}
 
     async def agent(state: State, config: RunnableConfig) -> dict:
@@ -142,7 +160,7 @@ def build_graph(llm: BaseChatModel, settings: Settings, checkpointer: BaseCheckp
         history = await prepare_for_model(state["messages"], ctx, settings.upload_public_base_url)
         if tool_calls_this_turn(state["messages"]) >= settings.ai_max_tool_calls:
             note = SystemMessage("本轮工具调用次数已达上限，请直接基于已有信息作答。")
-            response = await llm.ainvoke([system, *history, note])
+            response = await plain_llm.ainvoke([system, *history, note])
         else:
             response = await llm_with_tools.ainvoke([system, *history])
         return {"messages": [response]}
@@ -155,6 +173,7 @@ def build_graph(llm: BaseChatModel, settings: Settings, checkpointer: BaseCheckp
         if not reasons:
             return {}
         log.warning("输出防护触发：%s", reasons)
+        GUARD_TRIGGERS.labels("output_rewritten").inc()
         # 同 id 的消息会覆盖原消息，历史里留下的是处理后的版本
         return {"messages": [last.model_copy(update={"content": safe})]}
 
@@ -162,8 +181,11 @@ def build_graph(llm: BaseChatModel, settings: Settings, checkpointer: BaseCheckp
         messages = state["messages"]
         human = next((m.text for m in reversed(messages) if isinstance(m, HumanMessage)), "")
         ai = messages[-1].text if isinstance(messages[-1], AIMessage) else ""
-        await extract_and_save(llm, store, get_ctx(config).user["id"], state.get("profile", {}), human, ai)
-        return {}
+        profile = state.get("profile", {})
+        if not should_extract(human, profile):  # 普通找物、问规则：不花一次模型调用，也不推迟 done 事件
+            return {"memory_skipped": True}
+        await extract_and_save(extractor, store, get_ctx(config).user["id"], profile, human, ai)
+        return {"memory_skipped": False}
 
     graph = StateGraph(State)
     graph.add_node("load_memory", load_memory)
