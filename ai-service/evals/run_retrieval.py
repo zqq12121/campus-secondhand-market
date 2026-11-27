@@ -23,9 +23,8 @@ TOP_K = 5
 CASES = pathlib.Path(__file__).with_name("retrieval.jsonl")
 
 
-async def run() -> None:
+async def evaluate(token: str) -> dict[str, Any]:
     s = get_settings()
-    token = os.environ["AI_EVAL_TOKEN"]
     redis = Redis.from_url(s.redis_url)
     java = JavaClient(s.backend_base_url)
     index = GoodsIndex(s, redis, SentenceTransformerEmbedder(s.embedding_model, s.embedding_query_instruction))
@@ -61,7 +60,9 @@ async def run() -> None:
         print("MISS", m)
     await java.aclose()
     await redis.aclose()
+    return {"summary": {"cases": n, **{f"top{TOP_K}[{k}]": round(v / n, 3) for k, v in hits.items()},
+                        **{f"mrr[{k}]": round(v / n, 3) for k, v in rr.items()}}}
 
 
 if __name__ == "__main__":
-    asyncio.run(run())
+    asyncio.run(evaluate(os.environ["AI_EVAL_TOKEN"]))

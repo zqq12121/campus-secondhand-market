@@ -1,0 +1,102 @@
+# ai-service：每次推送跑单测（不需要密钥、不依赖外部服务）；
+# 需要 DeepSeek 密钥和完整环境的真实评测只在手动触发（workflow_dispatch）时跑，结果作为 artifact 上传。
+# 需要在仓库 Settings → Secrets 里配置 DEEPSEEK_API_KEY。
+name: ai-service
+
+on:
+  push:
+    paths:
+      - "ai-service/**"
+      - ".github/workflows/ai-service.yml"
+  workflow_dispatch:
+    inputs:
+      skip:
+        description: "跳过的评测项，空格分隔（rules_keyword rules_judge trajectory rules_retrieval goods_retrieval）"
+        required: false
+        default: ""
+
+jobs:
+  test:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen
+      - run: uv run pytest
+
+  evals:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      # 宿主机上的评测脚本经 Nginx（8088）访问 Java 和 ai-service，Redis 直连映射出来的 6379
+      BACKEND_BASE_URL: http://localhost:8088
+      REDIS_HOST: localhost
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+
+      - name: 缓存 HuggingFace 模型（embedding + 重排序约 1.2 GB）
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-bge-small-zh-v1.5-bge-reranker-base
+
+      - name: 准备 .env（JWT 密钥每次随机生成）
+        run: |
+          cp .env.example .env
+          sed -i "s/^JWT_USER_SECRET=.*/JWT_USER_SECRET=$(openssl rand -hex 32)/" .env
+
+      - name: 启动 MySQL / Redis，导入演示商品和评测用户
+        run: |
+          docker compose up -d --wait mysql redis
+          mysql_exec() { docker exec -i campus-trade-mysql sh -c 'mysql --default-character-set=utf8mb4 -uroot -p"$MYSQL_ROOT_PASSWORD" campus_trade'; }
+          mysql_exec < sql/demo_goods.sql
+          # 评测用户（不能登录，token 在下一步直接签发），id 段与压测脚本错开
+          echo "INSERT INTO \`user\` (id, school_id, campus_id, email, password_hash, nickname, credit_score)
+                SELECT 7100000, s.id, (SELECT id FROM campus WHERE school_id = s.id ORDER BY id LIMIT 1),
+                       'eval@eval.test', '!eval-no-login', '评测用户', 80
+                FROM school s ORDER BY s.id LIMIT 1;" | mysql_exec
+
+      - name: 启动 Java 后端、ai-service 与 Nginx
+        run: |
+          docker compose --profile app up -d --build
+          # /ready：Redis 可用、规则索引已建好；首次启动要下载模型，最多等 15 分钟
+          for i in $(seq 1 180); do
+            curl -sf http://localhost:8088/api/v1/ai/ready && break
+            sleep 5
+          done
+          curl -sf http://localhost:8088/api/v1/ai/ready
+          sleep 30  # 等商品索引的第一次同步
+
+      - name: 签发评测用户 token
+        run: |
+          secret=$(grep '^JWT_USER_SECRET=' .env | cut -d= -f2-)
+          token=$(uv run --no-project --with pyjwt python -c "
+          import sys, time, uuid, jwt
+          now = time.time()
+          print(jwt.encode({'sub': '7100000', 'jti': str(uuid.uuid4()), 'iat': int(now), 'iatMs': int(now * 1000),
+                            'exp': int(now) + 7200}, sys.argv[1], algorithm='HS256'))" "$secret")
+          echo "::add-mask::$token"
+          echo "AI_EVAL_TOKEN=$token" >> "$GITHUB_ENV"
+
+      - name: 跑评测
+        working-directory: ai-service
+        run: |
+          uv sync --frozen
+          uv run python -m evals.run_all --base http://localhost:8088 --skip ${{ inputs.skip }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-results
+          path: ai-service/evals/results/
+
+      - name: 失败时输出容器日志
+        if: failure()
+        run: docker compose --profile app logs --tail 200 backend ai

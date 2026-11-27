@@ -25,17 +25,16 @@ from pydantic import BaseModel, Field
 from redis.asyncio import Redis
 
 from app.config import Settings, get_settings
+from app.deps import build_deps
 from app.graph.builder import build_graph
 from app.graph.context import RequestContext
 from app.graph.images import human_content
 from app.graph.memory import SLOTS, namespace
 from app.guard import INPUT_REFUSAL, is_injection
-from app.java_client import CircuitBreaker, JavaApiError, JavaAuthError, JavaClient
+from app.java_client import JavaApiError, JavaAuthError, JavaClient
 from app.metrics import GUARD_TRIGGERS, REQUEST_SECONDS, REQUESTS, TTFT_SECONDS, observe_trace
 from app.observability import TraceCollector, flush_langfuse, langfuse_handler
-from app.rag.embedder import Embedder, HttpEmbedder, SentenceTransformerEmbedder
 from app.rag.goods_index import GoodsIndex
-from app.rag.reranker import CrossEncoderReranker, HttpReranker, Reranker
 from app.rag.rules_index import RulesIndex
 from app.ratelimit import check_rate
 from app.redis_lock import RedisLock, run_as_leader
@@ -102,30 +101,11 @@ def build_fallback_llm(s: Settings) -> ChatOpenAI | None:
                       stream_usage=True, max_retries=2, timeout=60)
 
 
-async def build_embedder(s: Settings) -> Embedder:
-    if s.embedding_service_url:
-        log.info("使用外置 embedding 服务：%s", s.embedding_service_url)
-        return await HttpEmbedder.create(s.embedding_service_url, s.embedding_query_instruction)
-    return await asyncio.to_thread(SentenceTransformerEmbedder, s.embedding_model, s.embedding_query_instruction)
-
-
-async def build_reranker(s: Settings) -> Reranker | None:
-    if s.rerank_service_url:
-        log.info("使用外置重排序服务：%s", s.rerank_service_url)
-        return HttpReranker(s.rerank_service_url)
-    return await asyncio.to_thread(CrossEncoderReranker, s.rerank_model) if s.rerank_model else None
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     s = get_settings()
-    redis = Redis.from_url(s.redis_url)
-    java = JavaClient(s.backend_base_url,
-                      breaker=CircuitBreaker(s.java_breaker_failures, s.java_breaker_cooldown_seconds))
-    embedder = await build_embedder(s)
-    reranker = await build_reranker(s)
-    goods_index = GoodsIndex(s, redis, embedder, reranker)
-    rules_index = RulesIndex(redis, embedder, java, reranker=reranker)
+    deps = await build_deps(s)
+    redis, java, goods_index, rules_index = deps.redis, deps.java, deps.goods_index, deps.rules_index
     langfuse = langfuse_handler(s)
     if langfuse:
         log.info("已启用 Langfuse 链路追踪：%s", s.langfuse_base_url)
@@ -158,11 +138,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # 等它们释放完锁再关 Redis 连接
     await asyncio.gather(*tasks, return_exceptions=True)
     flush_langfuse(s)
-    for client in (embedder, reranker):
-        if isinstance(client, (HttpEmbedder, HttpReranker)):
-            await client.aclose()
-    await java.aclose()
-    await redis.aclose()
+    await deps.aclose()
 
 
 app = FastAPI(title="campus-trade-ai", lifespan=lifespan)

@@ -9,6 +9,7 @@ import json
 import os
 import pathlib
 import time
+from typing import Any
 
 import httpx
 
@@ -40,19 +41,13 @@ def matches(answer: str, groups: list[str]) -> bool:
     return all(any(alt in answer for alt in g.split("|")) for g in groups)
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--base", default="http://localhost:8090")
-    # 默认每分钟限流 10 次，评测时按间隔发送
-    parser.add_argument("--interval", type=float, default=6.5)
-    args = parser.parse_args()
-    token = os.environ["AI_EVAL_TOKEN"]
+def evaluate(base: str, token: str, interval: float) -> dict[str, Any]:
     cases = [json.loads(line) for line in CASES.read_text(encoding="utf-8").splitlines() if line.strip()]
     correct = cited = 0
     for i, c in enumerate(cases):
         if i:
-            time.sleep(args.interval)
-        answer, tools = ask(args.base, token, c["question"])
+            time.sleep(interval)
+        answer, tools = ask(base, token, c["question"])
         ok = matches(answer, c["must"] + c.get("also", []))
         has_source = "来源" in answer
         correct += ok
@@ -63,6 +58,16 @@ def main() -> None:
             print("    " + answer.replace("\n", " ")[:300])
     n = len(cases)
     print(f"cases={n}  正确率={correct / n:.0%}  带出处={cited / n:.0%}")
+    return {"summary": {"cases": n, "keyword_correct": round(correct / n, 3), "cited": round(cited / n, 3)}}
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--base", default="http://localhost:8090")
+    # 默认每分钟限流 10 次，评测时按间隔发送
+    parser.add_argument("--interval", type=float, default=6.5)
+    args = parser.parse_args()
+    evaluate(args.base, os.environ["AI_EVAL_TOKEN"], args.interval)
 
 
 if __name__ == "__main__":

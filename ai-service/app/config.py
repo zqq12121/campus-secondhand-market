@@ -73,6 +73,9 @@ class Settings(BaseSettings):
     langfuse_secret_key: str = ""
     langfuse_base_url: str = "https://cloud.langfuse.com"
 
+    # 评测：LLM-as-judge 的评审模型（同一个 DeepSeek 接口），留空用 DEEPSEEK_MODEL
+    ai_eval_judge_model: str = ""
+
     @property
     def fallback_enabled(self) -> bool:
         return bool(self.fallback_model and self.fallback_api_key)

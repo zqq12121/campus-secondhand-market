@@ -16,6 +16,7 @@ Python 3.11 + FastAPI + LangGraph + DeepSeek。独立部署，Java 后端无需�
 app/
 ├── main.py            # FastAPI：/chat 与 /resume（SSE）、/memory（我的偏好）、/health、/ready、/metrics
 ├── config.py          # 全部配置走环境变量（见仓库根目录 .env.example）
+├── deps.py            # 进程级依赖初始化（Redis、Java、模型、索引），lifespan / 评测共用
 ├── java_client.py     # 带用户 token 调 Java /api/v1
 ├── ratelimit.py       # 按用户每分钟 / 每天次数
 ├── observability.py   # TraceCollector 回调：每次模型 / 工具调用的耗时、token、成本；可选 Langfuse
@@ -35,7 +36,7 @@ app/
     ├── memory.py      # 长期偏好：5 个固定槽位，存 LangGraph Store（Redis）
     └── builder.py     # START → load_memory → prepare → agent ⇄ tools → output_guard → save_memory → END
 knowledge/             # 平台规则知识库（交易流程、售后、信用分、发布与求购、账号与评价）
-evals/                 # 检索与规则问答评测集 + 脚本
+evals/                 # 评测集与脚本：检索、规则问答（关键词 + LLM-as-judge）、Agent 轨迹、汇总 run_all
 ```
 
 ## 本地运行
@@ -250,14 +251,37 @@ uv run pytest
 
 ### 评测
 
-需要导入演示数据，并启动 Java 后端和 ai-service；`AI_EVAL_TOKEN` 填任一用户的 token。
+`tests/` 下的单测不依赖外部服务，每次 push 都会跑。`evals/` 是真实环境的回归评测：需要导入演示数据（`sql/demo_goods.sql`），启动 Java 后端、Redis 和 ai-service，并配置 `DEEPSEEK_API_KEY`。`AI_EVAL_TOKEN` 填任一用户的 token。
 
 ```bash
-AI_EVAL_TOKEN=<token> uv run python -m evals.run_retrieval   # 商品检索 top5 命中率
-AI_EVAL_TOKEN=<token> uv run python -m evals.run_rules       # 规则问答正确率与出处（走 /chat 端到端）
+AI_EVAL_TOKEN=<token> uv run python -m evals.run_all              # 全部评测，输出总表并写入 evals/results/<日期>.json
+AI_EVAL_TOKEN=<token> uv run python -m evals.run_rules            # 规则问答：关键词判分（走 /chat 端到端）
+AI_EVAL_TOKEN=<token> uv run python -m evals.judge                # 规则问答：LLM-as-judge
+AI_EVAL_TOKEN=<token> uv run python -m evals.run_trajectory       # Agent 轨迹
+uv run python -m evals.run_rules_retrieval                        # 规则检索（只需要 Redis）
+AI_EVAL_TOKEN=<token> uv run python -m evals.run_retrieval        # 商品检索
+uv run python -m evals.count_memory_calls                         # 偏好抽取预判的调用次数（不调模型）
 ```
 
-2026-11-21 在演示数据上的结果（DeepSeek `deepseek-flash`，embedding `bge-small-zh-v1.5`）：
+`judge`、`run_trajectory` 直接调用真实的图（`evals/harness.py`），不经过 HTTP；会话和长期记忆用内存版，不会污染线上数据。写工具会停在确认卡片，不会真的发布。
+
+指标定义：
+
+| 评测（run_all 里的名字） | 指标 | 定义 |
+| --- | --- | --- |
+| `rules_keyword` | keyword_correct | 回答命中用例 `must` / `also` 里每组备选词中的至少一个。只是粗判，换个说法就会误判 |
+| `rules_keyword` | cited | 可回答的问题，回答里带「来源」 |
+| `rules_judge` | faithfulness | 评审模型判定：回答里的每条规则事实都能在 `search_rules` 检索到的片段里找到依据（0/1） |
+| `rules_judge` | correctness | 评审模型判定：结论和关键数字与 `rules.jsonl` 的 `reference` 一致（0/1）。`reference` 摘自 `knowledge/*.md` |
+| `trajectory` | pass_rate | `trajectory.jsonl` 里的工具约束全部满足的用例比例，另外按场景（规则 / 找物 / 订单 / 闲聊 / 写操作）分别统计 |
+| `rules_retrieval` | top1 / top3 / mrr | 片段同时命中 `must` 每组备选词即算命中；分别统计向量、关键词、混合、混合+重排 |
+| `goods_retrieval` | top5 / mrr | top5 中至少有一件 `relevant` 商品；分别统计向量、关键词、混合、混合+重排 |
+
+- **LLM-as-judge**（`evals/judge.py`）：评审提示词要求每项「先写理由再给分」，`Verdict` 的字段顺序也是先 `reason` 后 `score`，让分数受理由约束。评审模型默认与 `DEEPSEEK_MODEL` 相同，可以用 `AI_EVAL_JUDGE_MODEL` 换成别的。用同一个模型给自己打分会偏宽松，条件允许时换更强的评审模型。
+- **轨迹约束**（`evals/trajectory.py`，代码判定，不用模型）：`must_call`（如问规则必须调 `search_rules`）、`must_call_any`（问订单调 `list_my_orders` 或 `get_order`）、`must_not_call`（问订单不能调写工具）、`no_tools`（闲聊不调工具）、`verify_recommended`（最终回答里提到的每件商品都要先用 `get_goods_detail` 核实，且核实结果可购买；「提到」按 `search_goods` 返回商品的 id 或标题出现在回答里判定，换了说法的推荐会漏判）。`tests/test_trajectory.py` 用 ScriptedModel 跑真实的图，验证这些判定函数本身是对的。
+- **CI**：`.github/workflows/ai-service.yml` 在每次 push 时跑 pytest。真实评测只在手动触发（workflow_dispatch）时跑：用 docker compose 拉起整套环境、导入演示数据、插入评测用户并签发 token，然后执行 `run_all`，结果作为 artifact 上传。需要在仓库 Secrets 里配置 `DEEPSEEK_API_KEY`。这个 job 还没有在 GitHub 上实际跑过。
+
+2026-11-21 在演示数据上的结果（DeepSeek `deepseek-flash`，embedding `bge-small-zh-v1.5`；当时只有关键词判分）：
 
 | 评测 | 用例 | 结果 | 验收线 |
 | --- | --- | --- | --- |
@@ -266,12 +290,6 @@ AI_EVAL_TOKEN=<token> uv run python -m evals.run_rules       # 规则问答正�
 | 规则回答带出处 | 15 | 100% | 全部 |
 
 用例是按演示数据编写的，结果偏乐观；有了真实数据后应补充用例再测。
-
-规则检索单独评测（只需要 Redis 里已有规则索引，不需要 Java 和 DeepSeek）：
-
-```bash
-uv run python -m evals.run_rules_retrieval   # 向量 / 关键词 / 混合 / 混合+重排 的 top1、top3 命中率与 MRR
-```
 
 规则库加入全文召回前后的对比（待实测填写）：
 
@@ -283,6 +301,13 @@ uv run python -m evals.run_rules_retrieval   # 向量 / 关键词 / 混合 / 混
 | `run_rules_retrieval` | top3 命中 | — | 待填 |
 | `run_rules_retrieval` | MRR@5 | — | 待填 |
 
+新指标的首次基线（待实测填写）：
+
+| 评测 | 指标 | 结果 |
+| --- | --- | --- |
+| `rules_judge` | faithfulness / correctness | 待填 |
+| `trajectory` | pass_rate（18 条） | 待填 |
+
 ## 注意
 
 - 重排序模型约 1.1 GB，Docker 部署时和 embedding 模型一起缓存在 `hf-cache` 卷里；内存紧张时可以把 `RERANK_MODEL` 留空。
@@ -290,6 +315,6 @@ uv run python -m evals.run_rules_retrieval   # 向量 / 关键词 / 混合 / 混
 - `search_goods` 会同时调用 Java `/goods?keyword=`，这些查询会计入热搜词。
 - 规则知识库每 10 分钟检查一次 `knowledge/` 和公告，内容有变化才重建。修改规则后，记得同步更新 `knowledge/` 里的数值。
 - `save_memory` 先用 `should_extract` 做零成本预判：用户消息含偏好信号词（平时 / 一般 / 以后 / 常去 / 不要 / 别给我 / 预算 / 只要面交等，见 `memory.PREFERENCE_SIGNALS`），或者已有偏好且用户在纠正（不是 / 不对 / 改成等），才调用模型抽取，否则跳过。`chat_trace` 里的 `memory_skipped` 记录本轮是否跳过。词表宁宽勿窄：误触发只是多一次调用，漏抽会丢掉用户的偏好。代价是普通找物消息（如「找个台灯」）不再把这次的需求写进 `interests`。抽取仍在回复流式输出完成后同步执行，会推迟 `done` 事件；没有改成后台任务，因为进程退出时后台任务会丢。
-- `uv run python -m evals.count_memory_calls` 统计预判的效果：评测集里 50 条找物和规则问题，偏好抽取调用从 50 次降到 7 次（14%）；10 条手写的偏好说法全部触发（召回 100%，这组样例是对着词表写的，结果偏乐观）。
+- `uv run python -m evals.count_memory_calls` 统计预判的效果：评测集里 68 条找物、规则、订单和闲聊问题，偏好抽取调用从 68 次降到 9 次（13%）；10 条手写的偏好说法全部触发（召回 100%，这组样例是对着词表写的，结果偏乐观）。
 - 识图依赖 `deepseek-flash`。2026-11-21 实测 `deepseek-v4-pro` 不能识图，会胡乱描述图片，切换模型前要重新验证。
 - 参考价只取「同二级分类 + 品类词命中」的在售商品：至少 3 件时取中位数 ±20%，否则使用模型估价并注明仅供参考。

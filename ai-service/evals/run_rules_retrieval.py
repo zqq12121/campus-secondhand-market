@@ -14,7 +14,7 @@ from redis.asyncio import Redis
 
 from app.config import get_settings
 from app.java_client import JavaClient
-from app.main import build_embedder, build_reranker
+from app.deps import build_embedder, build_reranker
 from app.rag.rules_index import RulesIndex
 
 TOP_K = 5
@@ -25,7 +25,7 @@ def hit(content: str, groups: list[str]) -> bool:
     return all(any(alt in content for alt in g.split("|")) for g in groups)
 
 
-async def run() -> None:
+async def evaluate() -> dict[str, Any]:
     s = get_settings()
     redis = Redis.from_url(s.redis_url)
     java = JavaClient(s.backend_base_url)
@@ -63,7 +63,10 @@ async def run() -> None:
     print(f"MRR@{TOP_K}：" + "  ".join(f"{m}={rr[m] / n:.3f}" for m in modes))
     await java.aclose()
     await redis.aclose()
+    return {"summary": {"cases": n, **{f"top1[{m}]": round(top1[m] / n, 3) for m in modes},
+                        **{f"top3[{m}]": round(top3[m] / n, 3) for m in modes},
+                        **{f"mrr[{m}]": round(rr[m] / n, 3) for m in modes}}}
 
 
 if __name__ == "__main__":
-    asyncio.run(run())
+    asyncio.run(evaluate())

@@ -4,7 +4,7 @@ import json
 import httpx
 import pytest
 
-from app.main import build_embedder, build_reranker
+from app.deps import build_embedder, build_reranker
 from app.rag.embedder import TEI_BATCH_SIZE, HttpEmbedder
 from app.rag.reranker import HttpReranker, rerank
 from tests.fakes import settings
