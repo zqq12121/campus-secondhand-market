@@ -1,4 +1,8 @@
-"""规则知识库：knowledge/*.md + 上线公告，按二级标题切片后向量化，内容变化时整体重建。检索时向量召回再重排。"""
+"""规则知识库：knowledge/*.md + 上线公告，按二级标题切片后向量化，内容变化时整体重建。检索时向量召回再重排。
+
+蓝绿重建：每个内容版本一个独立索引 ai_rules_<hash 前 8 位>，Redis 里的 POINTER_KEY 指向当前版本。
+重建时先把新版本完整写进新索引，再切指针、删旧索引；重建期间检索一直读旧版本，不会落空。
+"""
 import asyncio
 import hashlib
 import json
@@ -20,7 +24,14 @@ from app.rag.reranker import Reranker, rerank
 log = logging.getLogger(__name__)
 
 KNOWLEDGE_DIR = pathlib.Path(__file__).resolve().parents[2] / "knowledge"
-HASH_KEY = "ai:rules_index:hash"
+# 当前版本指针，值是内容 hash 的前 8 位
+POINTER_KEY = "ai:rules_index:current"
+# 蓝绿改造前的固定索引和 hash 键，首次蓝绿重建后删除
+LEGACY_INDEX = "ai_rules"
+LEGACY_PREFIX = "ai:rules"
+LEGACY_HASH_KEY = "ai:rules_index:hash"
+# 索引 schema 变化时加 1：版本号算进内容 hash，保证 schema 变了会重建
+SCHEMA_VERSION = 1
 MAX_CHUNK_CHARS = 500
 REFRESH_SECONDS = 600
 # 有重排序模型时，向量先召回 top_k 的这么多倍，重排后再取 top_k
@@ -60,9 +71,9 @@ def split_markdown(doc_name: str, text: str) -> list[Chunk]:
     return chunks
 
 
-def build_schema(dims: int) -> IndexSchema:
+def build_schema(dims: int, name: str, prefix: str) -> IndexSchema:
     return IndexSchema.from_dict({
-        "index": {"name": "ai_rules", "prefix": "ai:rules", "storage_type": "hash"},
+        "index": {"name": name, "prefix": prefix, "storage_type": "hash"},
         "fields": [
             {"name": "chunk_id", "type": "tag"},
             {"name": "title", "type": "text"},
@@ -70,6 +81,11 @@ def build_schema(dims: int) -> IndexSchema:
              "attrs": {"dims": dims, "algorithm": "flat", "distance_metric": "cosine", "datatype": "float32"}},
         ],
     })
+
+
+def content_version(chunks: list[Chunk], dims: int) -> str:
+    payload = {"schema": SCHEMA_VERSION, "dims": dims, "chunks": [c.__dict__ for c in chunks]}
+    return hashlib.sha1(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()[:8]
 
 
 class RulesIndex:
@@ -80,7 +96,22 @@ class RulesIndex:
         self._embedder = embedder
         self._java = java
         self._dir = knowledge_dir
-        self.index = AsyncSearchIndex(build_schema(embedder.dims), redis_client=redis)
+        self._indexes: dict[str, AsyncSearchIndex] = {}
+
+    def _open(self, name: str, prefix: str) -> AsyncSearchIndex:
+        # 缓存索引对象：redisvl 首次使用时会校验 Redis 模块，不必每次检索都重来
+        if name not in self._indexes:
+            self._indexes[name] = AsyncSearchIndex(build_schema(self._embedder.dims, name, prefix),
+                                                   redis_client=self._redis)
+        return self._indexes[name]
+
+    def _versioned(self, version: str) -> AsyncSearchIndex:
+        # 前缀刻意不以 ai:rules 开头：旧索引 ai_rules 的前缀是 ai:rules，会把新数据也收进去，删旧索引时连带删掉
+        return self._open(f"ai_rules_{version}", f"ai:kb:{version}")
+
+    async def current_version(self) -> str | None:
+        raw = await self._redis.get(POINTER_KEY)
+        return raw.decode() if isinstance(raw, bytes) else raw
 
     async def collect(self) -> list[Chunk]:
         chunks: list[Chunk] = []
@@ -98,21 +129,30 @@ class RulesIndex:
         return chunks
 
     async def refresh(self) -> bool:
-        """内容有变化（或索引不存在）才重建，返回是否重建。"""
+        """内容有变化（或当前版本的索引不存在）才重建，返回是否重建。只应由选主拿到锁的实例调用。"""
         chunks = await self.collect()
-        digest = hashlib.sha1(json.dumps([c.__dict__ for c in chunks], ensure_ascii=False).encode()).hexdigest()
-        current = await self._redis.get(HASH_KEY)
-        if await self.index.exists() and current and current.decode() == digest:
+        version = content_version(chunks, self._embedder.dims)
+        current = await self.current_version()
+        if current == version and await self._versioned(version).exists():
             return False
         vectors = await self._embedder.embed_documents([f"{c.title}\n{c.content}" for c in chunks])
-        await self.index.create(overwrite=True, drop=True)
-        await self.index.load([
+        new = self._versioned(version)
+        # 同版本的残留（上次重建中途失败）先清掉；这个索引还没被指针指向，删了不影响检索
+        await new.create(overwrite=True, drop=True)
+        await new.load([
             {"chunk_id": c.chunk_id, "title": c.title, "content": c.content,
              "embedding": array_to_buffer(v, dtype="float32")}
             for c, v in zip(chunks, vectors)
         ], id_field="chunk_id")
-        await self._redis.set(HASH_KEY, digest)
-        log.info("规则知识库重建：%d 个片段", len(chunks))
+        # 新索引完整写好后才切指针，之后的检索都读新版本
+        await self._redis.set(POINTER_KEY, version)
+        if current and current != version:
+            await self._versioned(current).delete(drop=True)
+        legacy = self._open(LEGACY_INDEX, LEGACY_PREFIX)
+        if await legacy.exists():
+            await legacy.delete(drop=True)
+            await self._redis.delete(LEGACY_HASH_KEY)
+        log.info("规则知识库重建：%d 个片段，版本 %s → %s", len(chunks), current, version)
         return True
 
     async def run_forever(self) -> None:
@@ -123,12 +163,25 @@ class RulesIndex:
                 log.exception("规则知识库刷新失败")
             await asyncio.sleep(REFRESH_SECONDS)
 
+    async def _query(self, q: Any) -> list[dict[str, Any]]:
+        version = await self.current_version()
+        if version is None:  # 主实例还没建好第一个版本
+            return []
+        try:
+            return await self._versioned(version).query(q)
+        except Exception:
+            # 读完指针后刚好切换、旧索引已被删：按新指针重查一次
+            latest = await self.current_version()
+            if latest is None or latest == version:
+                raise
+            return await self._versioned(latest).query(q)
+
     async def search(self, question: str, top_k: int = 5) -> list[dict[str, Any]]:
         vector = await self._embedder.embed_query(question)
         n = top_k * RERANK_FACTOR if self._reranker else top_k
         q = VectorQuery(vector=vector, vector_field_name="embedding", return_fields=["title", "content"],
                         num_results=n)
-        hits = await self.index.query(q)
+        hits = await self._query(q)
         if self._reranker is not None and len(hits) > 1:
             try:
                 order = await rerank(self._reranker, question, [f"{d['title']}\n{d['content']}" for d in hits])

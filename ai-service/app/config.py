@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     # bge 中文模型对短查询建议加的检索指令
     embedding_query_instruction: str = "为这个句子生成表示以用于检索相关文章："
     goods_sync_interval_seconds: int = 120
+    # 多实例选主：只有持锁实例跑索引同步，持有者每 ttl/3 秒续期，其他实例每 ttl/3 秒重试抢锁
+    ai_leader_lock_ttl_seconds: int = 30
+    goods_sync_lock_key: str = "ai:leader:goods_sync"
+    rules_sync_lock_key: str = "ai:leader:rules_sync"
     # 本地重排序模型（cross-encoder），留空则不重排、直接用 RRF / 向量顺序
     rerank_model: str = "BAAI/bge-reranker-base"
 

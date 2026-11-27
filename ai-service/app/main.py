@@ -35,6 +35,7 @@ from app.rag.goods_index import GoodsIndex
 from app.rag.reranker import CrossEncoderReranker
 from app.rag.rules_index import RulesIndex
 from app.ratelimit import check_rate
+from app.redis_lock import RedisLock, run_as_leader
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("ai-service")
@@ -101,9 +102,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     langfuse = langfuse_handler(s)
     if langfuse:
         log.info("已启用 Langfuse 链路追踪：%s", s.langfuse_base_url)
-    tasks = [asyncio.create_task(rules_index.run_forever())]
+    # 多实例 / 多 worker 时只有拿到锁的实例跑同步，其他实例定期重试抢锁
+    ttl = s.ai_leader_lock_ttl_seconds
+    tasks = [asyncio.create_task(
+        run_as_leader(RedisLock(redis, s.rules_sync_lock_key, ttl), rules_index.run_forever))]
     if s.ai_mysql_user:
-        tasks.append(asyncio.create_task(goods_index.run_forever()))
+        tasks.append(asyncio.create_task(
+            run_as_leader(RedisLock(redis, s.goods_sync_lock_key, ttl), goods_index.run_forever)))
     else:
         log.warning("未配置 AI_MYSQL_USER，商品向量索引不会同步，检索只用关键词")
     async with (
@@ -120,6 +125,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
     for t in tasks:
         t.cancel()
+    # 等它们释放完锁再关 Redis 连接
+    await asyncio.gather(*tasks, return_exceptions=True)
     flush_langfuse(s)
     await java.aclose()
     await redis.aclose()

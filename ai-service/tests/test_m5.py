@@ -186,10 +186,16 @@ class _RulesQuery:
         return self.hits
 
 
+class _PointerRedis:
+    async def get(self, key: str) -> bytes:
+        return b"v1"
+
+
 async def test_rules_search_recalls_more_then_reranks() -> None:
     hits = [{"title": f"规则 > 第{i}条", "content": "退款" if i == 4 else "其他"} for i in range(6)]
-    rules = object.__new__(RulesIndex)
-    rules._embedder, rules._reranker, rules.index = _Embedder(), FakeReranker("退款"), _RulesQuery(hits)
+    index = _RulesQuery(hits)
+    rules = RulesIndex(_PointerRedis(), _Embedder(), FakeJava(), reranker=FakeReranker("退款"))
+    rules._indexes["ai_rules_v1"] = index
     result = await rules.search("能退款吗", top_k=2)
-    assert rules.index.num_results == [6]  # top_k × 3
+    assert index.num_results == [6]  # top_k × 3
     assert [r["source"] for r in result] == ["规则 > 第4条", "规则 > 第0条"]

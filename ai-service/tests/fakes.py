@@ -1,4 +1,5 @@
 """测试替身：按脚本回复的聊天模型、内存 Redis、Java 与索引桩。"""
+import asyncio
 import json
 import uuid
 from collections.abc import AsyncIterator, Callable
@@ -11,6 +12,7 @@ from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResu
 
 from app.config import Settings
 from app.graph.context import RequestContext
+from app.rag.rules_index import RulesIndex
 
 
 def call(name: str, **args: Any) -> AIMessage:
@@ -156,6 +158,55 @@ class FakeReranker:
         if self.fail:
             raise RuntimeError("model down")
         return [1.0 if self.keyword in d else 0.0 for d in docs]
+
+
+class FakeSearchIndex:
+    """内存版 redisvl AsyncSearchIndex：同名索引共享 store 里的同一份文档，query 按写入顺序返回前 n 条。
+
+    load_gate 不为 None 时，load 写完一半先停下等它放行，用来观察重建过程中的检索结果。
+    """
+
+    def __init__(self, store: dict[str, list[dict[str, Any]]], name: str,
+                 load_gate: asyncio.Event | None = None, loading: asyncio.Event | None = None) -> None:
+        self._store = store
+        self.name = name
+        self._gate = load_gate
+        self._loading = loading
+
+    async def exists(self) -> bool:
+        return self.name in self._store
+
+    async def create(self, overwrite: bool = False, drop: bool = False) -> None:
+        self._store[self.name] = []
+
+    async def load(self, data: list[dict[str, Any]], id_field: str | None = None) -> None:
+        half = len(data) // 2
+        self._store[self.name].extend(data[:half])
+        if self._gate is not None:
+            self._loading.set()
+            await self._gate.wait()
+        self._store[self.name].extend(data[half:])
+
+    async def delete(self, drop: bool = True) -> None:
+        self._store.pop(self.name, None)
+
+    async def query(self, q: Any) -> list[dict[str, Any]]:
+        if self.name not in self._store:
+            raise RuntimeError(f"{self.name}: no such index")
+        return self._store[self.name][:q._num_results]
+
+
+class InMemoryRulesIndex(RulesIndex):
+    """RulesIndex 的索引换成 FakeSearchIndex；指针等仍写在传入的 Redis（fakeredis）里。"""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.store: dict[str, list[dict[str, Any]]] = {}
+        self.load_gate: asyncio.Event | None = None
+        self.loading = asyncio.Event()
+
+    def _open(self, name: str, prefix: str) -> Any:
+        return FakeSearchIndex(self.store, name, self.load_gate, self.loading)
 
 
 def goods(gid: str, title: str, price: str, status: int = 2, reason: str | None = None) -> dict[str, Any]:

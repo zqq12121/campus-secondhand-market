@@ -20,11 +20,12 @@ app/
 ├── ratelimit.py       # 按用户每分钟 / 每天次数
 ├── observability.py   # TraceCollector 回调：每次模型 / 工具调用的耗时、token、成本；可选 Langfuse
 ├── guard.py           # 规则式安全防护：注入检测、工具结果过滤、输出检查
+├── redis_lock.py      # Redis 分布式锁（Lua 校验 value 再续期 / 释放）与选主执行
 ├── rag/
 │   ├── embedder.py    # 本地 bge-small-zh
 │   ├── reranker.py    # 本地 bge-reranker-base（cross-encoder）
 │   ├── goods_index.py # MySQL 增量同步 → Redis 向量索引；向量 + 关键词 RRF 混合检索，再重排
-│   └── rules_index.py # knowledge/*.md + 上线公告 → 按二级标题切片 → Redis 向量索引；召回 3 倍再重排
+│   └── rules_index.py # knowledge/*.md + 上线公告 → 按二级标题切片 → Redis 向量索引（蓝绿重建）；召回 3 倍再重排
 └── graph/
     ├── context.py     # 请求上下文（token 包在对象里，避免写进 checkpoint）
     ├── tools.py       # 只读工具：search_goods / get_goods_detail / search_rules / list_my_orders / get_order
@@ -164,6 +165,16 @@ docker exec -i campus-trade-mysql sh -c 'mysql --default-character-set=utf8mb4 -
 - 回复是流式输出的，改写发生在整条回复生成之后。用户可能短暂看到原文，之后才被替换。
 - 图片里的文字指令检测不到。
 - 规则覆盖不了换个说法的注入。命中情况可以看日志里的 `输入防护拦截` 和 `工具结果过滤疑似注入`。
+
+## 多实例部署
+
+可以起多个实例，或者 `uvicorn --workers N`，只需要共用同一个 Redis。
+
+- **选主同步**：商品索引同步和规则库重建都是后台循环，每个进程都会启动，但只有拿到 Redis 锁的那个进程真正执行。加锁用 `SET key <uuid> NX EX ttl`，持有者每 ttl/3 秒续期，其他进程每 ttl/3 秒重试一次。续期和释放用 Lua 脚本，先比对 value 再操作，只会动自己的锁。续期失败时立即停止同步，避免两个进程同时写；进程正常退出时主动释放锁，崩溃时锁最多 ttl 秒后过期，由其他进程接手。配置项：`AI_LEADER_LOCK_TTL_SECONDS`（默认 30）、`GOODS_SYNC_LOCK_KEY`、`RULES_SYNC_LOCK_KEY`。
+- **规则库蓝绿重建**：每个内容版本写进独立的索引 `ai_rules_<hash 前 8 位>`（键前缀 `ai:kb:<hash>`），Redis 键 `ai:rules_index:current` 指向当前版本。重建时先把新版本完整写好，再切换指针，最后删除旧索引。重建期间检索一直读旧版本。hash 包含 schema 版本和向量维度，schema 或 embedding 模型变化时会自动重建。旧版本的固定索引 `ai_rules` 会在第一次蓝绿重建后删除。
+- 商品索引是增量同步，没有做蓝绿，只加了选主。
+
+已知局限：锁没有 fencing token。如果主实例长时间卡住（比如 GC、网络分区）超过 ttl，可能和新主短暂重叠。两类同步都是幂等写入，重叠只会造成重复工作，不会写坏数据。
 
 ## 测试
 
