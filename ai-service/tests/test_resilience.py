@@ -32,9 +32,11 @@ def rate_limited(_: list[BaseMessage]) -> AIMessage:
 # ---------- 大模型降级 ----------
 
 def test_fallback_llm_only_when_configured() -> None:
+    # 只构造客户端、不发请求；密钥用占位值，不依赖运行环境里的 DEEPSEEK_API_KEY
     assert build_fallback_llm(settings()) is None
-    assert build_llm(settings()).max_retries == 2  # 没有备用模型时行为不变
-    s = settings(fallback_model="gpt-x", fallback_api_key="sk-test", fallback_base_url="http://fallback/v1")
+    assert build_llm(settings(deepseek_api_key="sk-test")).max_retries == 2  # 没有备用模型时行为不变
+    s = settings(deepseek_api_key="sk-test", fallback_model="gpt-x", fallback_api_key="sk-test",
+                 fallback_base_url="http://fallback/v1")
     fb = build_fallback_llm(s)
     assert fb is not None and fb.model_name == "gpt-x"
     assert build_llm(s).max_retries == 0  # 有备用时失败一次就切
