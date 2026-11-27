@@ -13,6 +13,7 @@ dependencies = [
     "langfuse==5.2.0",
     "langgraph==1.2.24",
     "langgraph-checkpoint-redis==0.6.0",
+    "mcp==2.3.0",
     "prometheus-client==0.26.0",
     "pydantic-settings==2.16.3",
     "pymysql==1.2.4",

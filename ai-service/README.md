@@ -23,6 +23,7 @@ app/
 ├── metrics.py         # Prometheus 指标
 ├── guard.py           # 规则式安全防护：注入检测、工具结果过滤、输出检查
 ├── redis_lock.py      # Redis 分布式锁（Lua 校验 value 再续期 / 释放）与选主执行
+├── mcp_server.py      # MCP Server：把 5 个只读工具暴露给 Claude Desktop / Cursor 等客户端
 ├── rag/
 │   ├── embedder.py    # bge-small-zh：本地模型或外置 TEI 服务
 │   ├── reranker.py    # bge-reranker-base（cross-encoder）：本地模型或外置 TEI 服务
@@ -30,7 +31,7 @@ app/
 │   └── rules_index.py # knowledge/*.md + 上线公告 → 按二级标题切片 → Redis 索引（蓝绿重建）；向量 + jieba 全文召回，RRF 合并后重排
 └── graph/
     ├── context.py     # 请求上下文（token 包在对象里，避免写进 checkpoint）
-    ├── tools.py       # 只读工具：search_goods / get_goods_detail / search_rules / list_my_orders / get_order
+    ├── tools.py       # 只读工具：search_goods / get_goods_detail / search_rules / list_my_orders / get_order（核心逻辑 *_impl 与 MCP 共用）
     ├── drafts.py      # 写工具：draft_want_post / suggest_listing，interrupt() 等用户确认
     ├── images.py      # 本轮图片转 data URL 给模型，历史图片换占位文字
     ├── memory.py      # 长期偏好：5 个固定槽位，存 LangGraph Store（Redis）
@@ -240,6 +241,53 @@ docker run -d --name tei-rerank -p 8092:80 -v hf-cache:/data \
 - **会话锁**：`/chat` 和 `/resume` 执行图之前按 thread_id（`user_id:conv_id`）加锁，键为 `ai:conv_lock:<user>:<conv>`，value 是随机 uuid。拿不到锁直接返回 409。锁覆盖整个 SSE 流，在流的 finally 里用 Lua 校验 value 后释放；流抛异常、客户端中途断开也会释放。`cancel_pending` 和输入防护拒答都会读写会话状态，所以也放在锁内执行。`AI_CONVERSATION_LOCK_TTL_SECONDS`（默认 120）兜底进程崩溃导致锁没释放的情况；单轮执行超过 TTL 时锁会提前过期，这时不再保证互斥。
 
 已知局限：锁没有 fencing token。如果主实例长时间卡住（比如 GC、网络分区）超过 ttl，可能和新主短暂重叠。两类同步都是幂等写入，重叠只会造成重复工作，不会写坏数据。
+
+## MCP
+
+把 5 个只读工具（`search_goods`、`get_goods_detail`、`search_rules`、`list_my_orders`、`get_order`）同时暴露成 MCP Server，可以接入 Claude Desktop、Cursor 等 MCP 客户端。用的是官方 Python SDK `mcp` 2.x，1.x 里的 `FastMCP` 在 2.x 改名为 `MCPServer`。
+
+```bash
+uv run python -m app.mcp_server                                    # stdio（默认）
+AI_MCP_TRANSPORT=streamable-http uv run python -m app.mcp_server   # streamable HTTP：http://127.0.0.1:8093/mcp
+```
+
+- **实现复用**：工具逻辑抽成接收 `RequestContext` 的普通 async 函数（`tools.*_impl`），LangChain 工具和 MCP 工具都调用它们。工具说明和参数说明直接取自 LangChain 工具的 docstring，两边只维护一份。依赖初始化（Redis、Java、embedding / 重排序、索引）与 FastAPI 共用 `app/deps.py` 的 `build_deps`。MCP 进程只读索引，不跑后台同步，所以要先启动过一次 ai-service，把规则和商品索引建好。
+- **鉴权**：每次调用都把用户 token 交给 Java 的 `/users/me` 校验，之后的 Java 请求都带这个 token，权限仍由 Java 判定。HTTP 模式从请求头 `Authorization: Bearer <token>` 取 token；stdio 模式是本机单用户，从环境变量 `AI_MCP_USER_TOKEN` 读。工具结果同样经过 `redact_untrusted` 过滤间接注入。
+- **为什么不暴露写工具**：`draft_want_post` 和 `suggest_listing` 靠 LangGraph 的 `interrupt()` 停在确认卡片，用户确认后经 `/resume` 从 checkpoint 继续执行。MCP 调用是一次请求一次返回，没有这套「暂停—确认—恢复」机制，直接暴露就绕过了用户确认。
+- MCP 调用不走 `/chat` 的限流和会话锁。HTTP 模式默认只监听 127.0.0.1，对外开放前要加限流。
+
+Claude Desktop（stdio）的 `claude_desktop_config.json`：
+
+```json
+{
+  "mcpServers": {
+    "campus-trade": {
+      "command": "uv",
+      "args": ["--directory", "/绝对路径/ai-service", "run", "python", "-m", "app.mcp_server"],
+      "env": {
+        "AI_MCP_USER_TOKEN": "<用户 token>",
+        "BACKEND_BASE_URL": "http://localhost:8080",
+        "REDIS_HOST": "localhost"
+      }
+    }
+  }
+}
+```
+
+stdio 进程由客户端拉起，启动时要加载 embedding 和重排序模型。配了 `EMBEDDING_SERVICE_URL` / `RERANK_SERVICE_URL`（见「外置 embedding / 重排序服务」）时启动会快很多。
+
+Cursor 等支持远程 MCP 的客户端，可以连 streamable HTTP（以 `~/.cursor/mcp.json` 为例）：
+
+```json
+{
+  "mcpServers": {
+    "campus-trade": {
+      "url": "http://127.0.0.1:8093/mcp",
+      "headers": { "Authorization": "Bearer <用户 token>" }
+    }
+  }
+}
+```
 
 ## 测试
 

@@ -1,4 +1,8 @@
-"""agent 的全部工具。只读工具在本文件，写工具（需用户确认）在 drafts.py。工具结果一律是 JSON 字符串。"""
+"""agent 的全部工具。只读工具在本文件，写工具（需用户确认）在 drafts.py。工具结果一律是 JSON 字符串。
+
+只读工具的逻辑写成接收 RequestContext 的普通 async 函数（*_impl），LangChain 工具和 MCP Server（app/mcp_server.py）
+都调用它们：LangChain 工具从 RunnableConfig 里取 ctx，MCP 工具按请求的 token 现建 ctx。
+"""
 import json
 import logging
 from typing import Any
@@ -6,7 +10,7 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
-from app.graph.context import get_ctx
+from app.graph.context import RequestContext, get_ctx
 from app.graph.drafts import draft_want_post, suggest_listing
 from app.guard import redact_untrusted
 from app.java_client import JavaApiError
@@ -28,6 +32,14 @@ def _dump(obj: Any) -> str:
     return json.dumps(safe, ensure_ascii=False)
 
 
+async def search_goods_impl(ctx: RequestContext, query: str, campus_id: str | None = None,
+                            category_id: str | None = None, min_price: float | None = None,
+                            max_price: float | None = None) -> str:
+    cards = await hybrid_search(ctx.goods_index, ctx.java, ctx.token, query, campus_id=campus_id,
+                                category_id=category_id, min_price=min_price, max_price=max_price)
+    return _dump({"count": len(cards), "goods": cards})
+
+
 @tool(parse_docstring=True)
 async def search_goods(query: str, config: RunnableConfig, campus_id: str | None = None,
                        category_id: str | None = None, min_price: float | None = None,
@@ -41,20 +53,10 @@ async def search_goods(query: str, config: RunnableConfig, campus_id: str | None
         min_price: 最低价（元）。
         max_price: 最高价（元）。
     """
-    ctx = get_ctx(config)
-    cards = await hybrid_search(ctx.goods_index, ctx.java, ctx.token, query, campus_id=campus_id,
-                                category_id=category_id, min_price=min_price, max_price=max_price)
-    return _dump({"count": len(cards), "goods": cards})
+    return await search_goods_impl(get_ctx(config), query, campus_id, category_id, min_price, max_price)
 
 
-@tool(parse_docstring=True)
-async def get_goods_detail(goods_id: str, config: RunnableConfig) -> str:
-    """查询商品的实时详情与可购买状态。向用户推荐任何商品前都必须先调用它核实。
-
-    Args:
-        goods_id: 商品 id。
-    """
-    ctx = get_ctx(config)
+async def get_goods_detail_impl(ctx: RequestContext, goods_id: str) -> str:
     try:
         d = await ctx.java.goods_detail(ctx.token, goods_id)
     except JavaApiError as e:
@@ -75,16 +77,29 @@ async def get_goods_detail(goods_id: str, config: RunnableConfig) -> str:
 
 
 @tool(parse_docstring=True)
+async def get_goods_detail(goods_id: str, config: RunnableConfig) -> str:
+    """查询商品的实时详情与可购买状态。向用户推荐任何商品前都必须先调用它核实。
+
+    Args:
+        goods_id: 商品 id。
+    """
+    return await get_goods_detail_impl(get_ctx(config), goods_id)
+
+
+async def search_rules_impl(ctx: RequestContext, question: str) -> str:
+    if ctx.rules_index is None:
+        return _dump({"results": [], "note": "规则库暂不可用"})
+    return _dump({"results": await ctx.rules_index.search(question)})
+
+
+@tool(parse_docstring=True)
 async def search_rules(question: str, config: RunnableConfig) -> str:
     """检索平台规则、FAQ 和公告（交易流程、售后、信用分、发布与求购、账号与评价等）。回答规则问题前必须调用。
 
     Args:
         question: 用户的规则问题，如「确认收货后还能退款吗」。
     """
-    ctx = get_ctx(config)
-    if ctx.rules_index is None:
-        return _dump({"results": [], "note": "规则库暂不可用"})
-    return _dump({"results": await ctx.rules_index.search(question)})
+    return await search_rules_impl(get_ctx(config), question)
 
 
 ORDER_STATUS = {10: "待卖家确认", 20: "待面交", 30: "待支付", 40: "待交货", 50: "待收货", 60: "售后中",
@@ -92,15 +107,7 @@ ORDER_STATUS = {10: "待卖家确认", 20: "待面交", 30: "待支付", 40: "�
 TRADE_MODE = {1: "面交", 2: "担保"}
 
 
-@tool(parse_docstring=True)
-async def list_my_orders(config: RunnableConfig, role: str = "BUYER", status: list[int] | None = None) -> str:
-    """查询当前用户的订单列表（最近 10 条）。只能查询，不能操作订单。
-
-    Args:
-        role: BUYER 我买到的，SELLER 我卖出的。
-        status: 按状态码筛选，可多选：10 待卖家确认 / 20 待面交 / 30 待支付 / 40 待交货 / 50 待收货 / 60 售后中 / 70 已完成 / 80 已取消 / 90 已退款。
-    """
-    ctx = get_ctx(config)
+async def list_my_orders_impl(ctx: RequestContext, role: str = "BUYER", status: list[int] | None = None) -> str:
     role = "SELLER" if role.upper() == "SELLER" else "BUYER"
     try:
         orders = await ctx.java.list_orders(ctx.token, role, status)
@@ -115,13 +122,17 @@ async def list_my_orders(config: RunnableConfig, role: str = "BUYER", status: li
 
 
 @tool(parse_docstring=True)
-async def get_order(order_id: str, config: RunnableConfig) -> str:
-    """查询一个订单的详情：当前状态、时间线、下一个超时节点、售后情况和用户此刻可做的操作。
+async def list_my_orders(config: RunnableConfig, role: str = "BUYER", status: list[int] | None = None) -> str:
+    """查询当前用户的订单列表（最近 10 条）。只能查询，不能操作订单。
 
     Args:
-        order_id: 订单 id（来自 list_my_orders）。
+        role: BUYER 我买到的，SELLER 我卖出的。
+        status: 按状态码筛选，可多选：10 待卖家确认 / 20 待面交 / 30 待支付 / 40 待交货 / 50 待收货 / 60 售后中 / 70 已完成 / 80 已取消 / 90 已退款。
     """
-    ctx = get_ctx(config)
+    return await list_my_orders_impl(get_ctx(config), role, status)
+
+
+async def get_order_impl(ctx: RequestContext, order_id: str) -> str:
     try:
         o = await ctx.java.get_order(ctx.token, order_id)
     except JavaApiError as e:
@@ -137,4 +148,15 @@ async def get_order(order_id: str, config: RunnableConfig) -> str:
     })
 
 
+@tool(parse_docstring=True)
+async def get_order(order_id: str, config: RunnableConfig) -> str:
+    """查询一个订单的详情：当前状态、时间线、下一个超时节点、售后情况和用户此刻可做的操作。
+
+    Args:
+        order_id: 订单 id（来自 list_my_orders）。
+    """
+    return await get_order_impl(get_ctx(config), order_id)
+
+
+READ_ONLY_TOOLS = [search_goods, get_goods_detail, search_rules, list_my_orders, get_order]
 TOOLS = [search_goods, get_goods_detail, search_rules, list_my_orders, get_order, draft_want_post, suggest_listing]

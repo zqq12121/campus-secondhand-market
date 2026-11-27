@@ -76,6 +76,12 @@ class Settings(BaseSettings):
     # 评测：LLM-as-judge 的评审模型（同一个 DeepSeek 接口），留空用 DEEPSEEK_MODEL
     ai_eval_judge_model: str = ""
 
+    # MCP Server（python -m app.mcp_server）：stdio 或 streamable-http；stdio 模式用 AI_MCP_USER_TOKEN 作为用户身份
+    ai_mcp_transport: str = "stdio"
+    ai_mcp_host: str = "127.0.0.1"
+    ai_mcp_port: int = 8093
+    ai_mcp_user_token: str = ""
+
     @property
     def fallback_enabled(self) -> bool:
         return bool(self.fallback_model and self.fallback_api_key)
