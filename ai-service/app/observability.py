@@ -17,6 +17,9 @@ from langgraph.errors import GraphInterrupt
 
 from app.config import Settings
 
+# 备用模型的调用带这个 tag（见 app.graph.builder.with_fallback），据此在 chat_trace 里标出降级
+FALLBACK_TAG = "llm_fallback"
+
 
 def _ms(started: float) -> int:
     return int((time.monotonic() - started) * 1000)
@@ -26,26 +29,35 @@ class TraceCollector(AsyncCallbackHandler):
     def __init__(self, price_input_per_m: float = 0.0, price_output_per_m: float = 0.0) -> None:
         self._prices = (price_input_per_m, price_output_per_m)
         self._started: dict[UUID, tuple[float, str]] = {}
+        # 备用模型发起的调用（带 FALLBACK_TAG）
+        self._fallback_runs: set[UUID] = set()
         self.llm_calls: list[dict[str, Any]] = []
         self.tool_calls: list[dict[str, Any]] = []
 
     async def on_chat_model_start(self, serialized: dict[str, Any], messages: list[list[BaseMessage]], *,
-                                  run_id: UUID, metadata: dict[str, Any] | None = None, **kwargs: Any) -> None:
+                                  run_id: UUID, metadata: dict[str, Any] | None = None,
+                                  tags: list[str] | None = None, **kwargs: Any) -> None:
         self._started[run_id] = (time.monotonic(), (metadata or {}).get("langgraph_node", ""))
+        if FALLBACK_TAG in (tags or []):
+            self._fallback_runs.add(run_id)
+
+    def _llm_call(self, run_id: UUID, **fields: Any) -> None:
+        started, node = self._started.pop(run_id, (time.monotonic(), ""))
+        call = {"node": node, "ms": _ms(started), **fields}
+        if run_id in self._fallback_runs:
+            self._fallback_runs.discard(run_id)
+            call["fallback"] = True
+        self.llm_calls.append(call)
 
     async def on_llm_end(self, response: LLMResult, *, run_id: UUID, **kwargs: Any) -> None:
-        started, node = self._started.pop(run_id, (time.monotonic(), ""))
         usage: dict[str, Any] = {}
         for generations in response.generations:
             for g in generations:
                 usage = getattr(getattr(g, "message", None), "usage_metadata", None) or usage
-        self.llm_calls.append({"node": node, "ms": _ms(started), "input_tokens": usage.get("input_tokens", 0),
-                               "output_tokens": usage.get("output_tokens", 0)})
+        self._llm_call(run_id, input_tokens=usage.get("input_tokens", 0), output_tokens=usage.get("output_tokens", 0))
 
     async def on_llm_error(self, error: BaseException, *, run_id: UUID, **kwargs: Any) -> None:
-        started, node = self._started.pop(run_id, (time.monotonic(), ""))
-        self.llm_calls.append({"node": node, "ms": _ms(started), "input_tokens": 0, "output_tokens": 0,
-                               "error": type(error).__name__})
+        self._llm_call(run_id, input_tokens=0, output_tokens=0, error=type(error).__name__)
 
     async def on_tool_start(self, serialized: dict[str, Any], input_str: str, *, run_id: UUID,
                             **kwargs: Any) -> None:
@@ -71,7 +83,8 @@ class TraceCollector(AsyncCallbackHandler):
         return round((u["input_tokens"] * self._prices[0] + u["output_tokens"] * self._prices[1]) / 1_000_000, 6)
 
     def summary(self) -> dict[str, Any]:
-        return {**self.usage(), "cost": self.cost(), "llm": self.llm_calls, "tools": self.tool_calls}
+        return {**self.usage(), "cost": self.cost(), "fallback": any(c.get("fallback") for c in self.llm_calls),
+                "llm": self.llm_calls, "tools": self.tool_calls}
 
 
 def langfuse_handler(s: Settings) -> BaseCallbackHandler | None:

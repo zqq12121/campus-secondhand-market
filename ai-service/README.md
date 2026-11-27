@@ -151,6 +151,22 @@ docker exec -i campus-trade-mysql sh -c 'mysql --default-character-set=utf8mb4 -
 
 规则的命中判定方式：取评测集里的关键事实词，看是否出现在检索到的片段中。这只是粗判。
 
+## 容错
+
+下游出故障时，助手的部分功能降级，整体仍然可用。
+
+**大模型降级**：配置 `FALLBACK_MODEL`、`FALLBACK_API_KEY`（以及可选的 `FALLBACK_BASE_URL`，OpenAI 兼容接口）后，主模型报超时 / 连接失败、429、5xx 时，用 LangChain 的 `with_fallbacks` 切到备用模型。参数错误、鉴权失败这类问题换模型也解决不了，不切换，直接报错。
+
+- agent 用的是 `bind_tools` 之后的模型：主、备模型各自 `bind_tools` 再组合，降级后照样能调用工具。摘要压缩、强制作答、偏好抽取用的模型也做了降级。
+- 配了备用模型时，主模型改为不重试（`max_retries=0`），失败一次就切换。否则重试 2 次再加上 60 秒超时，用户最多要等 3 分钟。
+- 备用模型的调用带 `llm_fallback` tag。`chat_trace` 日志里，失败的主模型调用会带 `error`，备用模型的调用带 `"fallback": true`，顶层的 `fallback` 表示本轮是否发生过降级。
+- 已知局限：如果主模型已经流式输出了一部分才失败，前端会先收到这部分片段，再收到备用模型的完整回答。超时、429、5xx 通常发生在第一个 token 之前，这种情况很少见。
+
+**Java 调用**：
+
+- 连接级重试：`httpx.AsyncHTTPTransport(retries=2)`，只重试建连失败。这时请求还没发出去，POST 重试也安全。
+- 熔断器（`java_client.CircuitBreaker`）：连续失败 `JAVA_BREAKER_FAILURES` 次（默认 5）后熔断 `JAVA_BREAKER_COOLDOWN_SECONDS` 秒（默认 30），熔断期间直接抛 `JavaApiError(503, "服务暂不可用")`，不再发请求。冷却结束后进入半开状态，只放行一个试探请求：成功就关闭熔断，失败就再熔断一个周期。只有 5xx 和网络错误计为失败；401、403、其他 4xx 和业务错误码说明 Java 正常响应，会清零失败计数。熔断期间登录校验返回 503，工具调用把「服务暂不可用」交给模型，由模型告诉用户。
+
 ## 外置 embedding / 重排序服务
 
 默认在进程内加载 `bge-small-zh-v1.5` 和 `bge-reranker-base`，两个模型加起来约 1.2 GB。也可以拆成独立的 [text-embeddings-inference](https://github.com/huggingface/text-embeddings-inference)（TEI）服务，ai-service 通过 HTTP 调用：

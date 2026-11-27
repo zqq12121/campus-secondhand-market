@@ -13,11 +13,18 @@ class Settings(BaseSettings):
     deepseek_model: str = "deepseek-flash"
     # enabled / disabled；工具调用场景默认关闭思考，更快也更省
     deepseek_thinking: str = "disabled"
+    # 备用模型（OpenAI 兼容接口），模型名和密钥都配才启用：主模型超时、429、5xx 时切换；BASE_URL 留空用 OpenAI 官方地址
+    fallback_model: str = ""
+    fallback_api_key: str = ""
+    fallback_base_url: str = ""
 
     # Java 后端
     backend_base_url: str = "http://localhost:8080"
     # 与 Java 的 UPLOAD_PUBLIC_BASE_URL 一致：用户图片必须是这个前缀下的地址
     upload_public_base_url: str = "http://localhost:8080/uploads"
+    # Java 调用熔断：连续失败 N 次后熔断 M 秒，期间直接返回「服务暂不可用」；N 填 0 关闭
+    java_breaker_failures: int = 5
+    java_breaker_cooldown_seconds: int = 30
 
     # Redis（与 Java 共用实例）
     redis_host: str = "localhost"
@@ -63,6 +70,10 @@ class Settings(BaseSettings):
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
     langfuse_base_url: str = "https://cloud.langfuse.com"
+
+    @property
+    def fallback_enabled(self) -> bool:
+        return bool(self.fallback_model and self.fallback_api_key)
 
     @property
     def redis_url(self) -> str:

@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 from langchain_deepseek import ChatDeepSeek
+from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.redis.aio import AsyncRedisSaver
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.store.base import BaseStore
@@ -28,7 +29,7 @@ from app.graph.context import RequestContext
 from app.graph.images import human_content
 from app.graph.memory import SLOTS, namespace
 from app.guard import INPUT_REFUSAL, is_injection
-from app.java_client import JavaApiError, JavaAuthError, JavaClient
+from app.java_client import CircuitBreaker, JavaApiError, JavaAuthError, JavaClient
 from app.observability import TraceCollector, flush_langfuse, langfuse_handler
 from app.rag.embedder import Embedder, HttpEmbedder, SentenceTransformerEmbedder
 from app.rag.goods_index import GoodsIndex
@@ -86,9 +87,17 @@ class AppState:
 
 
 def build_llm(s: Settings) -> ChatDeepSeek:
+    # 有备用模型时主模型不重试：失败一次就切备用，避免重试叠加超时让用户等好几分钟
     return ChatDeepSeek(model=s.deepseek_model, api_key=s.deepseek_api_key, api_base=s.deepseek_base_url,
                         extra_body={"thinking": {"type": s.deepseek_thinking}}, stream_usage=True,
-                        max_retries=2, timeout=60)
+                        max_retries=0 if s.fallback_enabled else 2, timeout=60)
+
+
+def build_fallback_llm(s: Settings) -> ChatOpenAI | None:
+    if not s.fallback_enabled:
+        return None
+    return ChatOpenAI(model=s.fallback_model, api_key=s.fallback_api_key, base_url=s.fallback_base_url or None,
+                      stream_usage=True, max_retries=2, timeout=60)
 
 
 async def build_embedder(s: Settings) -> Embedder:
@@ -109,7 +118,8 @@ async def build_reranker(s: Settings) -> Reranker | None:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     s = get_settings()
     redis = Redis.from_url(s.redis_url)
-    java = JavaClient(s.backend_base_url)
+    java = JavaClient(s.backend_base_url,
+                      breaker=CircuitBreaker(s.java_breaker_failures, s.java_breaker_cooldown_seconds))
     embedder = await build_embedder(s)
     reranker = await build_reranker(s)
     goods_index = GoodsIndex(s, redis, embedder, reranker)
@@ -134,7 +144,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     ):
         await checkpointer.asetup()
         await store.setup()
-        graph = build_graph(build_llm(s), s, checkpointer, store)
+        fallback = build_fallback_llm(s)
+        if fallback:
+            log.info("已启用备用模型：%s", s.fallback_model)
+        graph = build_graph(build_llm(s), s, checkpointer, store, fallback)
         app.state.ai = AppState(s, redis, java, goods_index, graph, store, rules_index,
                                 callbacks=[langfuse] if langfuse else [])
         yield
@@ -170,6 +183,8 @@ async def current_user(authorization: str | None = Header(default=None),
     except JavaApiError as e:
         if e.code == 403:
             raise HTTPException(403, "账号已被限制")
+        if e.code == 503:  # Java 熔断中
+            raise HTTPException(503, e.message)
         raise
 
 

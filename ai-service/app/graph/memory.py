@@ -3,8 +3,8 @@ import json
 import logging
 import re
 
-from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage
+from langchain_core.runnables import Runnable
 from langgraph.store.base import BaseStore
 from pydantic import BaseModel, Field, ValidationError
 
@@ -70,7 +70,7 @@ def parse_update(text: str) -> MemoryUpdate | None:
     return update
 
 
-async def extract_and_save(llm: BaseChatModel, store: BaseStore, user_id: str, profile: dict[str, str],
+async def extract_and_save(llm: Runnable, store: BaseStore, user_id: str, profile: dict[str, str],
                            human: str, ai: str) -> MemoryUpdate | None:
     """抽取失败只记日志，不影响对话。"""
     prompt = EXTRACT_PROMPT.format(
