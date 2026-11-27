@@ -122,10 +122,11 @@ async def test_chat_trace_log_has_every_llm_and_tool_call(caplog: pytest.LogCapt
               ai_price_input_per_m=2.0, ai_price_output_per_m=8.0)
     with caplog.at_level(logging.INFO, logger="ai-service"):
         async with client() as c:
-            await c.post("/api/v1/ai/chat", json={"message": "台灯"}, headers=H)
+            await c.post("/api/v1/ai/chat", json={"message": "平时用的台灯坏了"}, headers=H)
     line = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("chat_trace "))
     trace = json.loads(line.removeprefix("chat_trace "))
     assert [c["node"] for c in trace["llm"]] == ["agent", "agent", "save_memory"]
+    assert trace["memory_skipped"] is False
     assert [t["name"] for t in trace["tools"]] == ["get_goods_detail"]
     assert trace["input_tokens"] == 30 and trace["output_tokens"] == 15
     assert trace["cost"] == pytest.approx((30 * 2.0 + 15 * 8.0) / 1_000_000)
@@ -199,3 +200,13 @@ async def test_rules_search_recalls_more_then_reranks() -> None:
     result = await rules.search("能退款吗", top_k=2)
     assert index.num_results == [6]  # top_k × 3
     assert [r["source"] for r in result] == ["规则 > 第4条", "规则 > 第0条"]
+
+
+async def test_chat_trace_records_memory_skipped(caplog: pytest.LogCaptureFixture) -> None:
+    setup_app([AIMessage("你好")])
+    with caplog.at_level(logging.INFO, logger="ai-service"):
+        async with client() as c:
+            await c.post("/api/v1/ai/chat", json={"message": "有台灯吗"}, headers=H)
+    line = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("chat_trace "))
+    trace = json.loads(line.removeprefix("chat_trace "))
+    assert trace["memory_skipped"] is True and [c["node"] for c in trace["llm"]] == ["agent"]

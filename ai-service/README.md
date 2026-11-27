@@ -246,6 +246,7 @@ AI_EVAL_TOKEN=<token> uv run python -m evals.run_rules       # 规则问答正�
 - 商品索引每 `GOODS_SYNC_INTERVAL_SECONDS` 秒按 `goods.updated_at` 增量同步。更换 embedding 模型后，需要先删除 Redis 里的 `ai_goods` 索引和 `ai:goods_index:watermark`，再重启服务。
 - `search_goods` 会同时调用 Java `/goods?keyword=`，这些查询会计入热搜词。
 - 规则知识库每 10 分钟检查一次 `knowledge/` 和公告，内容有变化才重建。修改规则后，记得同步更新 `knowledge/` 里的数值。
-- `save_memory` 每轮多一次模型调用，在回复流式输出完成后执行，只会推迟 `done` 事件。
+- `save_memory` 先用 `should_extract` 做零成本预判：用户消息含偏好信号词（平时 / 一般 / 以后 / 常去 / 不要 / 别给我 / 预算 / 只要面交等，见 `memory.PREFERENCE_SIGNALS`），或者已有偏好且用户在纠正（不是 / 不对 / 改成等），才调用模型抽取，否则跳过。`chat_trace` 里的 `memory_skipped` 记录本轮是否跳过。词表宁宽勿窄：误触发只是多一次调用，漏抽会丢掉用户的偏好。代价是普通找物消息（如「找个台灯」）不再把这次的需求写进 `interests`。抽取仍在回复流式输出完成后同步执行，会推迟 `done` 事件；没有改成后台任务，因为进程退出时后台任务会丢。
+- `uv run python -m evals.count_memory_calls` 统计预判的效果：评测集里 50 条找物和规则问题，偏好抽取调用从 50 次降到 7 次（14%）；10 条手写的偏好说法全部触发（召回 100%，这组样例是对着词表写的，结果偏乐观）。
 - 识图依赖 `deepseek-flash`。2026-11-21 实测 `deepseek-v4-pro` 不能识图，会胡乱描述图片，切换模型前要重新验证。
 - 参考价只取「同二级分类 + 品类词命中」的在售商品：至少 3 件时取中位数 ±20%，否则使用模型估价并注明仅供参考。

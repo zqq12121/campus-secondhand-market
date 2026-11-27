@@ -5,7 +5,7 @@ START → load_memory → prepare → agent ⇄ tools → output_guard → save_
   prepare：     历史过长时把旧消息压缩成摘要（短期记忆的长度控制）
   agent：       DeepSeek + 工具；本轮工具调用达上限后不再给工具，强制作答
   output_guard：检查最终回复（提示词泄露、手机号 / 身份证号），有问题就按原 id 替换这条消息
-  save_memory： 从本轮对话抽取偏好写回 Store
+  save_memory： 用户消息含偏好信号词时，从本轮对话抽取偏好写回 Store
 """
 import logging
 
@@ -23,7 +23,7 @@ from langgraph.store.base import BaseStore
 from app.config import Settings
 from app.graph.context import RequestContext, get_ctx
 from app.graph.images import prepare_for_model
-from app.graph.memory import extract_and_save, format_profile, load_profile, memory_extractor
+from app.graph.memory import extract_and_save, format_profile, load_profile, memory_extractor, should_extract
 from app.graph.tools import TOOLS
 from app.guard import check_output, shingles
 from app.observability import FALLBACK_TAG
@@ -92,6 +92,8 @@ def with_fallback(primary: Runnable, fallback: Runnable | None) -> Runnable:
 class State(MessagesState):
     summary: str
     profile: dict[str, str]
+    # 本轮 save_memory 是否跳过了抽取，写进 chat_trace
+    memory_skipped: bool
 
 
 def _format_ctx(ctx: RequestContext, summary: str, profile: dict[str, str]) -> str:
@@ -177,8 +179,11 @@ def build_graph(llm: BaseChatModel, settings: Settings, checkpointer: BaseCheckp
         messages = state["messages"]
         human = next((m.text for m in reversed(messages) if isinstance(m, HumanMessage)), "")
         ai = messages[-1].text if isinstance(messages[-1], AIMessage) else ""
-        await extract_and_save(extractor, store, get_ctx(config).user["id"], state.get("profile", {}), human, ai)
-        return {}
+        profile = state.get("profile", {})
+        if not should_extract(human, profile):  # 普通找物、问规则：不花一次模型调用，也不推迟 done 事件
+            return {"memory_skipped": True}
+        await extract_and_save(extractor, store, get_ctx(config).user["id"], profile, human, ai)
+        return {"memory_skipped": False}
 
     graph = StateGraph(State)
     graph.add_node("load_memory", load_memory)

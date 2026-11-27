@@ -235,6 +235,7 @@ async def stream_chat(st: AppState, ctx: RequestContext, conv_id: str, graph_inp
     texts: dict[str, str] = {}
     revised: list[str] = []
     pending = False
+    memory_skipped: bool | None = None  # 没走到 save_memory（等待确认、出错）时为 None
     try:
         async for mode, chunk in st.graph.astream(graph_input, config, stream_mode=["messages", "updates"]):
             if mode == "messages":
@@ -248,6 +249,8 @@ async def stream_chat(st: AppState, ctx: RequestContext, conv_id: str, graph_inp
                     yield sse("token", msg.text)
                 continue
             for node, update in chunk.items():
+                if node == "save_memory":
+                    memory_skipped = (update or {}).get("memory_skipped")
                 if node == "__interrupt__":  # 写工具停下等用户确认
                     pending = True
                     for it in update:
@@ -277,7 +280,7 @@ async def stream_chat(st: AppState, ctx: RequestContext, conv_id: str, graph_inp
         # 每个请求一行 JSON：各次模型调用和工具调用的耗时、用量、成本，不记录对话内容
         log.info("chat_trace %s", json.dumps({
             "user": ctx.user["id"], "conv": conv_id, "ms": int((time.monotonic() - started) * 1000),
-            "pending": pending, "revised": bool(revised), **trace.summary(),
+            "pending": pending, "revised": bool(revised), "memory_skipped": memory_skipped, **trace.summary(),
         }, ensure_ascii=False))
         await release_lock(lock)
 

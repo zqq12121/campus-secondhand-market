@@ -19,6 +19,29 @@ SLOTS: dict[str, str] = {
 }
 MAX_VALUE_CHARS = 60
 
+# 抽取前的零成本预判：本轮用户消息命中这些词才调用模型抽取偏好。
+# 词表宁宽勿窄：误触发只是多花一次模型调用（模型多半返回「无变化」，不会写坏数据）；
+# 漏抽则用户说过的偏好就丢了，下次还得再说一遍。所以拿不准的词也放进来。
+# 「100 以内」这类单次搜索条件刻意不收：抽取提示词本来就规定它们不算偏好，触发了也是白调用。
+PREFERENCE_SIGNALS = (
+    # 长期习惯
+    "平时", "一般", "通常", "经常", "常去", "常在", "常用", "总是", "一直", "习惯", "以后", "今后", "下次", "每次",
+    "都要", "都只", "都在",
+    # 校区 / 住处
+    "我在", "我住", "住在", "宿舍", "校区",
+    # 预算
+    "预算",
+    # 喜好与排斥
+    "喜欢", "感兴趣", "偏好", "爱买", "不要", "别给我", "别推", "不想要", "不喜欢", "讨厌", "不考虑", "排除",
+    # 交易方式
+    "只要", "只接受", "只能", "面交", "担保",
+    # 主动要求记住 / 忘掉
+    "记住", "记一下", "帮我记", "忘掉", "忘了",
+)
+# 已有偏好时，用户纠正或否定的说法
+CORRECTION_SIGNALS = ("不是", "不对", "错了", "改成", "改为", "换成", "换到", "搬", "不再", "不用", "已经不", "别按",
+                      "删掉", "删除", "去掉")
+
 EXTRACT_PROMPT = """你负责维护二手平台用户的长期偏好。根据本轮对话，判断是否需要更新下列槽位：
 {slots}
 
@@ -67,6 +90,13 @@ def namespace(user_id: str) -> tuple[str, str]:
 async def load_profile(store: BaseStore, user_id: str) -> dict[str, str]:
     items = await store.asearch(namespace(user_id), limit=len(SLOTS))
     return {i.key: i.value["value"] for i in items if i.key in SLOTS}
+
+
+def should_extract(human_text: str, profile: dict[str, str]) -> bool:
+    """本轮是否值得调用模型抽取偏好：含偏好信号词，或已有偏好且用户在纠正。"""
+    if any(w in human_text for w in PREFERENCE_SIGNALS):
+        return True
+    return bool(profile) and any(w in human_text for w in CORRECTION_SIGNALS)
 
 
 def format_profile(profile: dict[str, str]) -> str:
