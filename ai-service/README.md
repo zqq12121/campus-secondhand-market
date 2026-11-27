@@ -26,7 +26,7 @@ app/
 │   ├── embedder.py    # bge-small-zh：本地模型或外置 TEI 服务
 │   ├── reranker.py    # bge-reranker-base（cross-encoder）：本地模型或外置 TEI 服务
 │   ├── goods_index.py # MySQL 增量同步 → Redis 向量索引；向量 + 关键词 RRF 混合检索，再重排
-│   └── rules_index.py # knowledge/*.md + 上线公告 → 按二级标题切片 → Redis 向量索引（蓝绿重建）；召回 3 倍再重排
+│   └── rules_index.py # knowledge/*.md + 上线公告 → 按二级标题切片 → Redis 索引（蓝绿重建）；向量 + jieba 全文召回，RRF 合并后重排
 └── graph/
     ├── context.py     # 请求上下文（token 包在对象里，避免写进 checkpoint）
     ├── tools.py       # 只读工具：search_goods / get_goods_detail / search_rules / list_my_orders / get_order
@@ -161,7 +161,13 @@ user_id、conversation_id 不作为标签：每种标签组合都是一条独立
 
 ## 重排序
 
-向量和关键词召回后用 RRF 合并，再用 `bge-reranker-base` 对前 30 条打分重排。规则检索先向量召回 15 条，重排后取前 5 条。模型加载失败或打分报错时退回原顺序。`RERANK_MODEL` 留空可以关闭。
+向量和关键词召回后用 RRF 合并，再用 `bge-reranker-base` 对前 30 条打分重排。规则检索的向量和全文各召回 15 条，RRF 合并后取前 15 条重排，最后取前 5 条。模型加载失败或打分报错时退回原顺序。`RERANK_MODEL` 留空可以关闭。
+
+**规则库混合检索**：规则里有很多数字和专有词（「15 分钟」「信用分」），向量召回对它们不敏感，所以加了一路全文（BM25）召回。
+
+- 中文分词：redisvl 0.32 的 `IndexSchema` 不能设置 RediSearch 的 `LANGUAGE chinese`，绕过 redisvl 手写 `FT.CREATE` 又会丢掉它的 schema 管理，所以选了 jieba 预分词。`title + content` 用 `cut_for_search` 切词，去掉虚词后用空格拼接，写进 `tokens` 文本字段；查询用同一个分词器。领域词（信用分、担保订单……）加进了词典，见 `rules_index.DOMAIN_WORDS`。代价是多一个依赖，首次分词要加载词典，约 1 秒。
+- 合并复用 `goods_index.rrf_merge`。任意一路失败都会降级成只用另一路并告警，两路都失败时返回空结果，不抛异常。
+- schema 版本（`SCHEMA_VERSION`）算进了内容 hash，加 `tokens` 字段后第一次启动会自动走一次蓝绿重建。
 
 2026-11-24 本地实测（CPU，M 系列 Mac）：
 
@@ -260,6 +266,22 @@ AI_EVAL_TOKEN=<token> uv run python -m evals.run_rules       # 规则问答正�
 | 规则回答带出处 | 15 | 100% | 全部 |
 
 用例是按演示数据编写的，结果偏乐观；有了真实数据后应补充用例再测。
+
+规则检索单独评测（只需要 Redis 里已有规则索引，不需要 Java 和 DeepSeek）：
+
+```bash
+uv run python -m evals.run_rules_retrieval   # 向量 / 关键词 / 混合 / 混合+重排 的 top1、top3 命中率与 MRR
+```
+
+规则库加入全文召回前后的对比（待实测填写）：
+
+| 评测 | 指标 | 只用向量（改动前） | 混合（改动后） |
+| --- | --- | --- | --- |
+| `run_rules` | 正确率 | 100% | 待填 |
+| `run_rules` | 带出处 | 100% | 待填 |
+| `run_rules_retrieval` | top1 命中（向量 / 关键词 / 混合 / 混合+重排） | — | 待填 |
+| `run_rules_retrieval` | top3 命中 | — | 待填 |
+| `run_rules_retrieval` | MRR@5 | — | 待填 |
 
 ## 注意
 

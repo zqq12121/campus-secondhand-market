@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 from langchain_core.messages import AIMessage
+from redisvl.query import VectorQuery
 
 from app.graph.builder import PROMPT_SHINGLES, SYSTEM_PROMPT
 from app.graph.tools import get_goods_detail
@@ -184,7 +185,7 @@ class _RulesQuery:
 
     async def query(self, q: Any) -> list[dict[str, str]]:
         self.num_results.append(q._num_results)
-        return self.hits
+        return self.hits if isinstance(q, VectorQuery) else []
 
 
 class _PointerRedis:
@@ -193,12 +194,12 @@ class _PointerRedis:
 
 
 async def test_rules_search_recalls_more_then_reranks() -> None:
-    hits = [{"title": f"规则 > 第{i}条", "content": "退款" if i == 4 else "其他"} for i in range(6)]
+    hits = [{"chunk_id": f"c{i}", "title": f"规则 > 第{i}条", "content": "退款" if i == 4 else "其他"} for i in range(6)]
     index = _RulesQuery(hits)
     rules = RulesIndex(_PointerRedis(), _Embedder(), FakeJava(), reranker=FakeReranker("退款"))
     rules._indexes["ai_rules_v1"] = index
     result = await rules.search("能退款吗", top_k=2)
-    assert index.num_results == [6]  # top_k × 3
+    assert index.num_results == [6, 6]  # 向量、全文各召回 top_k × 3
     assert [r["source"] for r in result] == ["规则 > 第4条", "规则 > 第0条"]
 
 

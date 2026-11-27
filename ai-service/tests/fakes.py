@@ -9,6 +9,7 @@ from langchain_core.callbacks import AsyncCallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
+from redisvl.query import TextQuery
 
 from app.config import Settings
 from app.graph.context import RequestContext
@@ -215,7 +216,12 @@ class FakeSearchIndex:
     async def query(self, q: Any) -> list[dict[str, Any]]:
         if self.name not in self._store:
             raise RuntimeError(f"{self.name}: no such index")
-        return self._store[self.name][:q._num_results]
+        docs = self._store[self.name]
+        if isinstance(q, TextQuery):  # 全文：按命中的查询词个数排序，一个都没命中的不返回
+            words = q._text.split()
+            scored = [(sum(w in d["tokens"].split() for w in words), i) for i, d in enumerate(docs)]
+            docs = [docs[i] for score, i in sorted(scored, key=lambda x: (-x[0], x[1])) if score]
+        return docs[:q._num_results]
 
 
 class InMemoryRulesIndex(RulesIndex):

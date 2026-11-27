@@ -153,7 +153,7 @@ async def test_search_retries_when_pointer_switches_mid_query(redis: FakeAsyncRe
     await rules.refresh()
     old = await rules.current_version()
     # 模拟：读到旧指针后，另一实例已切到新版本并删掉旧索引
-    rules.store["ai_rules_new00000"] = [{"title": "售后 > 退款", "content": "新规则"}]
+    rules.store["ai_rules_new00000"] = [{"chunk_id": "c1", "title": "售后 > 退款", "content": "新规则", "tokens": "新 规则"}]
     rules.store.pop(f"ai_rules_{old}")
     real_get = redis.get
     calls = 0
