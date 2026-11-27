@@ -26,6 +26,7 @@ from app.graph.images import prepare_for_model
 from app.graph.memory import extract_and_save, format_profile, load_profile, memory_extractor, should_extract
 from app.graph.tools import TOOLS
 from app.guard import check_output, shingles
+from app.metrics import GUARD_TRIGGERS
 from app.observability import FALLBACK_TAG
 
 log = logging.getLogger(__name__)
@@ -172,6 +173,7 @@ def build_graph(llm: BaseChatModel, settings: Settings, checkpointer: BaseCheckp
         if not reasons:
             return {}
         log.warning("输出防护触发：%s", reasons)
+        GUARD_TRIGGERS.labels("output_rewritten").inc()
         # 同 id 的消息会覆盖原消息，历史里留下的是处理后的版本
         return {"messages": [last.model_copy(update={"content": safe})]}
 

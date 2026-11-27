@@ -33,6 +33,8 @@ class ScriptedModel(BaseChatModel):
     # 每个元素是 (entered, release) 两个 Event：下一次流式调用先 set entered，再等 release 放行；
     # 列表在 bind_tools 的副本间共享，只拦截一次调用
     gates: list[tuple[asyncio.Event, asyncio.Event]] = []
+    # 每次调用 usage 里命中上下文缓存的输入 token 数
+    cached_tokens: int = 0
 
     @property
     def _llm_type(self) -> str:
@@ -76,8 +78,10 @@ class ScriptedModel(BaseChatModel):
             {"name": tc["name"], "args": json.dumps(tc["args"]), "id": tc["id"], "index": i}
             for i, tc in enumerate(msg.tool_calls)
         ]
-        chunk = AIMessageChunk(content=msg.content, tool_call_chunks=chunks,
-                               usage_metadata={"input_tokens": 10, "output_tokens": 5, "total_tokens": 15})
+        usage = {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
+        if self.cached_tokens:
+            usage["input_token_details"] = {"cache_read": self.cached_tokens}
+        chunk = AIMessageChunk(content=msg.content, tool_call_chunks=chunks, usage_metadata=usage)
         if run_manager and msg.content:
             await run_manager.on_llm_new_token(msg.content, chunk=ChatGenerationChunk(message=chunk))
         yield ChatGenerationChunk(message=chunk)

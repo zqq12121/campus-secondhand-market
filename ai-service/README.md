@@ -14,11 +14,12 @@ Python 3.11 + FastAPI + LangGraph + DeepSeek。独立部署，Java 后端无需�
 
 ```
 app/
-├── main.py            # FastAPI：/chat 与 /resume（SSE）、/memory（我的偏好）、/health
+├── main.py            # FastAPI：/chat 与 /resume（SSE）、/memory（我的偏好）、/health、/ready、/metrics
 ├── config.py          # 全部配置走环境变量（见仓库根目录 .env.example）
 ├── java_client.py     # 带用户 token 调 Java /api/v1
 ├── ratelimit.py       # 按用户每分钟 / 每天次数
 ├── observability.py   # TraceCollector 回调：每次模型 / 工具调用的耗时、token、成本；可选 Langfuse
+├── metrics.py         # Prometheus 指标
 ├── guard.py           # 规则式安全防护：注入检测、工具结果过滤、输出检查
 ├── redis_lock.py      # Redis 分布式锁（Lua 校验 value 再续期 / 释放）与选主执行
 ├── rag/
@@ -126,15 +127,35 @@ docker exec -i campus-trade-mysql sh -c 'mysql --default-character-set=utf8mb4 -
 每个请求结束时输出一行 `chat_trace` JSON 日志，只有元数据，不含对话内容：
 
 ```json
-{"user": "7", "conv": "…", "ms": 3120, "pending": false, "revised": false,
- "input_tokens": 5210, "output_tokens": 380, "cost": 0.013,
- "llm":   [{"node": "agent", "ms": 1450, "input_tokens": 2400, "output_tokens": 60}, …],
+{"user": "7", "conv": "…", "ms": 3120, "ttft_ms": 820, "pending": false, "revised": false, "memory_skipped": true,
+ "input_tokens": 5210, "output_tokens": 380, "cached_input_tokens": 3840, "cost": 0.009, "fallback": false,
+ "llm":   [{"node": "agent", "ms": 1450, "input_tokens": 2400, "cached_input_tokens": 1920, "output_tokens": 60}, …],
  "tools": [{"name": "search_goods", "ms": 210}, {"name": "draft_want_post", "ms": 3, "error": "interrupted"}]}
 ```
 
 - `llm` 的 `node` 是发起调用的图节点：`agent`、`prepare`（摘要压缩）、`save_memory`（偏好抽取）。
-- `cost` 按 `AI_PRICE_INPUT_PER_M` / `AI_PRICE_OUTPUT_PER_M` 估算，没有区分缓存命中价，偏高。
+- `ttft_ms`：从请求开始到第一个 `token` 事件的毫秒数。本轮没有输出 token（比如直接停在确认卡片）时为 `null`。
+- `cached_input_tokens`：命中 DeepSeek 上下文缓存的输入 token 数。langchain-deepseek 把 DeepSeek 返回的 `prompt_cache_hit_tokens` 放在 `usage_metadata.input_token_details.cache_read`。
+- `cost`：未命中缓存的输入按 `AI_PRICE_INPUT_PER_M` 计，命中缓存的按 `AI_PRICE_CACHED_INPUT_PER_M` 计（不配置时按输入价计，与之前一致），输出按 `AI_PRICE_OUTPUT_PER_M` 计。SSE `done` 事件里的 `usage` 格式不变。
 - 工具 `error` 为 `interrupted` 表示写工具停下等用户确认，不是故障。
+
+**提示词前缀缓存**：DeepSeek 的上下文缓存按请求前缀匹配。系统提示词里所有用户都相同的部分（规则、校区、分类）在前，用户相关的部分（昵称、注册校区、偏好、摘要）在最后，不同用户、不同会话的请求可以共用同一段缓存前缀。原来的顺序已经满足这一点，只加了测试守住；`guard.py` 的提示词泄露检测不受影响。
+
+**Prometheus**：`GET /api/v1/ai/metrics`。前端 Nginx 已屏蔽这个路径，Prometheus 直接抓 `ai:8090`。
+
+| 指标 | 标签 | 说明 |
+| --- | --- | --- |
+| `ai_requests_total` | endpoint、result | result：ok / pending / error / aborted（客户端断开）/ refused（输入拦截）/ busy（409）/ rate_limited（429） |
+| `ai_request_duration_seconds` | endpoint | 整个 SSE 流的耗时直方图 |
+| `ai_ttft_seconds` | endpoint | 首 token 延迟直方图 |
+| `ai_llm_tokens_total` | node、kind | kind：input_uncached / input_cached / output |
+| `ai_tool_duration_seconds` | tool | 工具耗时直方图 |
+| `ai_tool_errors_total` | tool | 工具报错次数，`interrupted` 不算 |
+| `ai_guard_triggers_total` | kind | input_blocked / tool_redacted / output_rewritten |
+
+user_id、conversation_id 不作为标签：每种标签组合都是一条独立的时间序列，按用户打标签会导致基数爆炸，按用户排查请用 `chat_trace` 日志。多 worker 部署时每个进程各自计数，需要设置 `PROMETHEUS_MULTIPROC_DIR` 启用 prometheus_client 的多进程模式，这次没有实现。
+
+**就绪检查**：`GET /api/v1/ai/ready` 检查 Redis 能否 ping 通、规则索引的当前版本是否存在，任一项失败返回 503（`data` 里标明哪项失败），适合用作 K8s readinessProbe。`/health` 保持不变，只表示进程还活着。
 
 配置 `LANGFUSE_PUBLIC_KEY` 和 `LANGFUSE_SECRET_KEY` 后，会额外把完整链路（每个节点的输入输出、提示词、工具参数）上报到 Langfuse，按用户和会话归组。**上报内容包含对话原文和图片**，上生产前要确认隐私合规。可以用 Langfuse Cloud，也可以自己部署后改 `LANGFUSE_BASE_URL`。
 

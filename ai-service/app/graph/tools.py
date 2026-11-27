@@ -10,6 +10,7 @@ from app.graph.context import get_ctx
 from app.graph.drafts import draft_want_post, suggest_listing
 from app.guard import redact_untrusted
 from app.java_client import JavaApiError
+from app.metrics import GUARD_TRIGGERS
 from app.rag.goods_index import hybrid_search
 
 log = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ def _dump(obj: Any) -> str:
     safe, n = redact_untrusted(obj)
     if n:
         log.warning("工具结果过滤疑似注入 %d 处", n)
+        GUARD_TRIGGERS.labels("tool_redacted").inc()
     return json.dumps(safe, ensure_ascii=False)
 
 

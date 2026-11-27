@@ -66,6 +66,8 @@ class Settings(BaseSettings):
     # 可观测性：模型价格（元 / 百万 token），只用于估算成本，留 0 不计
     ai_price_input_per_m: float = 0.0
     ai_price_output_per_m: float = 0.0
+    # 命中 DeepSeek 上下文缓存的输入 token 单价；不配置时按 AI_PRICE_INPUT_PER_M 计
+    ai_price_cached_input_per_m: float | None = None
     # Langfuse 链路追踪，两个密钥都填才启用；会把对话内容发到 Langfuse
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""

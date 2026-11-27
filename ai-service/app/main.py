@@ -10,7 +10,7 @@ from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi import Path as PathParam
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 from langchain_deepseek import ChatDeepSeek
@@ -20,6 +20,7 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.store.base import BaseStore
 from langgraph.store.redis.aio import AsyncRedisStore
 from langgraph.types import Command
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel, Field
 from redis.asyncio import Redis
 
@@ -30,6 +31,7 @@ from app.graph.images import human_content
 from app.graph.memory import SLOTS, namespace
 from app.guard import INPUT_REFUSAL, is_injection
 from app.java_client import CircuitBreaker, JavaApiError, JavaAuthError, JavaClient
+from app.metrics import GUARD_TRIGGERS, REQUEST_SECONDS, REQUESTS, TTFT_SECONDS, observe_trace
 from app.observability import TraceCollector, flush_langfuse, langfuse_handler
 from app.rag.embedder import Embedder, HttpEmbedder, SentenceTransformerEmbedder
 from app.rag.goods_index import GoodsIndex
@@ -204,11 +206,12 @@ def thread_config(ctx: RequestContext, conv_id: str) -> dict[str, Any]:
     return {"configurable": {"thread_id": f"{ctx.user['id']}:{conv_id}", "ctx": ctx}, "recursion_limit": 40}
 
 
-async def lock_conversation(st: AppState, ctx: RequestContext, conv_id: str) -> RedisLock:
+async def lock_conversation(st: AppState, ctx: RequestContext, conv_id: str, endpoint: str) -> RedisLock:
     """按 thread_id 加锁：用户连点两次发送、/chat 和 /resume 同时到达时，两次图执行不会并发读写同一个 checkpoint。"""
     lock = RedisLock(st.redis, f"ai:conv_lock:{ctx.user['id']}:{conv_id}",
                      st.settings.ai_conversation_lock_ttl_seconds)
     if not await lock.acquire():
+        REQUESTS.labels(endpoint, "busy").inc()
         raise HTTPException(409, CONVERSATION_BUSY)
     return lock
 
@@ -224,12 +227,15 @@ async def release_lock(lock: RedisLock | None) -> None:
 
 
 async def stream_chat(st: AppState, ctx: RequestContext, conv_id: str, graph_input: Any,
-                      lock: RedisLock | None = None) -> AsyncIterator[str]:
-    trace = TraceCollector(st.settings.ai_price_input_per_m, st.settings.ai_price_output_per_m)
+                      lock: RedisLock | None = None, endpoint: str = "chat") -> AsyncIterator[str]:
+    trace = TraceCollector(st.settings.ai_price_input_per_m, st.settings.ai_price_output_per_m,
+                           st.settings.ai_price_cached_input_per_m)
     config = {**thread_config(ctx, conv_id), "callbacks": [trace, *st.callbacks],
               # Langfuse 按这两个字段归组用户和会话
               "metadata": {"langfuse_user_id": str(ctx.user["id"]), "langfuse_session_id": conv_id}}
     started = time.monotonic()
+    first_token_at: float | None = None  # 首 token 延迟（TTFT）
+    result = "aborted"  # 没走到 done / error 就结束，说明客户端中途断开
     last_msg_id: str | None = None
     # 本轮 agent 每条发言的全文，输出防护改写某条时据此拼出整轮的新文本
     texts: dict[str, str] = {}
@@ -246,6 +252,8 @@ async def stream_chat(st: AppState, ctx: RequestContext, conv_id: str, graph_inp
                         yield sse("token", "\n\n")
                     last_msg_id = msg.id
                     texts[msg.id] = texts.get(msg.id, "") + msg.text
+                    if first_token_at is None:
+                        first_token_at = time.monotonic()
                     yield sse("token", msg.text)
                 continue
             for node, update in chunk.items():
@@ -272,15 +280,24 @@ async def stream_chat(st: AppState, ctx: RequestContext, conv_id: str, graph_inp
                             yield sse("goods", [card])
                         if draft := listing_draft(m):
                             yield sse("listing", draft)
+        result = "pending" if pending else "ok"
         yield sse("done", {"conversationId": conv_id, "usage": trace.usage(), "pending": pending})
     except Exception:
+        result = "error"
         log.exception("对话失败 user=%s conv=%s", ctx.user["id"], conv_id)
         yield sse("error", {"code": 500, "message": "助手暂时不可用，请稍后再试"})
     finally:
+        elapsed = time.monotonic() - started
+        ttft = first_token_at - started if first_token_at is not None else None
+        REQUESTS.labels(endpoint, result).inc()
+        REQUEST_SECONDS.labels(endpoint).observe(elapsed)
+        if ttft is not None:
+            TTFT_SECONDS.labels(endpoint).observe(ttft)
+        observe_trace(trace)
         # 每个请求一行 JSON：各次模型调用和工具调用的耗时、用量、成本，不记录对话内容
         log.info("chat_trace %s", json.dumps({
-            "user": ctx.user["id"], "conv": conv_id, "ms": int((time.monotonic() - started) * 1000),
-            "pending": pending, "revised": bool(revised), "memory_skipped": memory_skipped, **trace.summary(),
+            "user": ctx.user["id"], "conv": conv_id, "ms": int(elapsed * 1000),
+            "ttft_ms": int(ttft * 1000) if ttft is not None else None, "pending": pending, "revised": bool(revised), "memory_skipped": memory_skipped, **trace.summary(),
         }, ensure_ascii=False))
         await release_lock(lock)
 
@@ -320,9 +337,10 @@ async def cancel_pending(graph: CompiledStateGraph, config: dict[str, Any]) -> N
     ]}, as_node="tools")
 
 
-async def guarded_context(st: AppState, token: str, me: dict[str, Any]) -> RequestContext:
+async def guarded_context(st: AppState, token: str, me: dict[str, Any], endpoint: str) -> RequestContext:
     retry_after = await check_rate(st.redis, me["id"], st.settings.ai_rate_per_minute, st.settings.ai_rate_per_day)
     if retry_after is not None:
+        REQUESTS.labels(endpoint, "rate_limited").inc()
         raise HTTPException(429, "提问太频繁，请稍后再试", headers={"Retry-After": str(retry_after)})
     categories, campuses = await st.meta()
     return RequestContext(token=token, user=me, java=st.java, goods_index=st.goods_index,
@@ -352,14 +370,16 @@ async def chat(body: ChatRequest, user: tuple[str, dict[str, Any]] = Depends(cur
     prefix = st.settings.upload_public_base_url.rstrip("/") + "/"
     if any(not u.startswith(prefix) for u in body.images):
         raise HTTPException(400, "图片必须先上传到平台")
-    ctx = await guarded_context(st, token, me)
+    ctx = await guarded_context(st, token, me, "chat")
     conv_id = body.conversationId or str(uuid.uuid4())
     # 拒答和取消待确认卡片都会读写会话状态，也要在锁内；锁由流结束时释放
-    lock = await lock_conversation(st, ctx, conv_id)
+    lock = await lock_conversation(st, ctx, conv_id, "chat")
     try:
         if is_injection(body.message):
             # 不进模型、不写入会话历史，也不取消待确认的卡片
             log.warning("输入防护拦截 user=%s conv=%s", me["id"], conv_id)
+            GUARD_TRIGGERS.labels("input_blocked").inc()
+            REQUESTS.labels("chat", "refused").inc()
             return sse_response(refusal(st, ctx, conv_id, lock))
         await cancel_pending(st.graph, thread_config(ctx, conv_id))
         message = HumanMessage(human_content(body.message, body.images))
@@ -375,14 +395,14 @@ async def resume(body: ResumeRequest, conversation_id: str = PathParam(pattern=C
                  st: AppState = Depends(get_app_state)) -> StreamingResponse:
     """确认卡片的回调：用户确认 / 修改后确认 / 取消一个写操作。"""
     token, me = user
-    ctx = await guarded_context(st, token, me)
-    lock = await lock_conversation(st, ctx, conversation_id)
+    ctx = await guarded_context(st, token, me, "resume")
+    lock = await lock_conversation(st, ctx, conversation_id, "resume")
     try:
         state = await st.graph.aget_state(thread_config(ctx, conversation_id))
         if body.interruptId not in {i.id for i in state.interrupts}:
             raise HTTPException(409, "没有待确认的操作，可能已处理或已取消")
         command = Command(resume={body.interruptId: {"decision": body.decision, "edits": body.edits}})
-        return sse_response(stream_chat(st, ctx, conversation_id, command, lock))
+        return sse_response(stream_chat(st, ctx, conversation_id, command, lock, "resume"))
     except BaseException:
         await release_lock(lock)
         raise
@@ -419,3 +439,23 @@ async def clear_memory(user: tuple[str, dict[str, Any]] = Depends(current_user),
 @app.get("/api/v1/ai/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/v1/ai/ready")
+async def ready(st: AppState = Depends(get_app_state)) -> JSONResponse:
+    """就绪检查：Redis 能 ping 通、规则索引已建好，才把流量放进来。/health 只表示进程活着。"""
+    checks = {"redis": False, "rules_index": False}
+    try:
+        checks["redis"] = bool(await st.redis.ping())
+        checks["rules_index"] = st.rules_index is not None and await st.rules_index.ready()
+    except Exception as e:
+        log.warning("就绪检查失败: %s", e)
+    ok = all(checks.values())
+    return JSONResponse({"code": 0 if ok else 503, "message": "ok" if ok else "未就绪", "data": checks},
+                        status_code=200 if ok else 503)
+
+
+@app.get("/api/v1/ai/metrics")
+async def metrics() -> Response:
+    # 只给内网的 Prometheus 抓取；前端 Nginx 已屏蔽这个路径
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)

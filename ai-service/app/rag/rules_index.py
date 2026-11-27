@@ -113,6 +113,11 @@ class RulesIndex:
         raw = await self._redis.get(POINTER_KEY)
         return raw.decode() if isinstance(raw, bytes) else raw
 
+    async def ready(self) -> bool:
+        """当前版本的索引存在，检索才有结果。"""
+        version = await self.current_version()
+        return bool(version) and await self._versioned(version).exists()
+
     async def collect(self) -> list[Chunk]:
         chunks: list[Chunk] = []
         for path in sorted(self._dir.glob("*.md")):
