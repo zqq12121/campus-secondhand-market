@@ -263,6 +263,8 @@ async def stream_chat(st: AppState, ctx: RequestContext, conv_id: str, graph_inp
         log.exception("对话失败 user=%s conv=%s", ctx.user["id"], conv_id)
         yield sse("error", {"code": 500, "message": "助手暂时不可用，请稍后再试"})
     finally:
+        # 先释放会话锁：后面的统计和日志即使出错，也不会把锁留到 TTL 过期
+        await release_lock(lock)
         elapsed = time.monotonic() - started
         ttft = first_token_at - started if first_token_at is not None else None
         REQUESTS.labels(endpoint, result).inc()
@@ -273,9 +275,9 @@ async def stream_chat(st: AppState, ctx: RequestContext, conv_id: str, graph_inp
         # 每个请求一行 JSON：各次模型调用和工具调用的耗时、用量、成本，不记录对话内容
         log.info("chat_trace %s", json.dumps({
             "user": ctx.user["id"], "conv": conv_id, "ms": int(elapsed * 1000),
-            "ttft_ms": int(ttft * 1000) if ttft is not None else None, "pending": pending, "revised": bool(revised), "memory_skipped": memory_skipped, **trace.summary(),
+            "ttft_ms": int(ttft * 1000) if ttft is not None else None, "pending": pending, "revised": bool(revised),
+            "memory_skipped": memory_skipped, **trace.summary(),
         }, ensure_ascii=False))
-        await release_lock(lock)
 
 
 def _tool_json(m: ToolMessage, name: str) -> dict[str, Any] | None:
