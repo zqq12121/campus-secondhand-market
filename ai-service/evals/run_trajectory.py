@@ -32,8 +32,9 @@ async def evaluate(token: str) -> dict[str, Any]:
             print(f"{'OK ' if not failures else 'BAD'} [{c['category']}] {c['question']}  tools={[s.name for s in steps]}")
             for f in failures:
                 print(f"    {f}")
-            if failures:
-                failed.append({"id": c["id"], "tools": [s.name for s in steps], "failures": failures})
+            if failures:  # 存下回答原文：判定是近似的，排查时要看模型到底是推荐还是只顺带提了一句
+                failed.append({"id": c["id"], "tools": [s.name for s in steps], "failures": failures,
+                               "answer": answer})
     finally:
         await agent.aclose()
     passed = sum(sum(v) for v in by_category.values())
