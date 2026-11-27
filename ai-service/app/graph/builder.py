@@ -23,7 +23,7 @@ from langgraph.store.base import BaseStore
 from app.config import Settings
 from app.graph.context import RequestContext, get_ctx
 from app.graph.images import prepare_for_model
-from app.graph.memory import extract_and_save, format_profile, load_profile
+from app.graph.memory import extract_and_save, format_profile, load_profile, memory_extractor
 from app.graph.tools import TOOLS
 from app.guard import check_output, shingles
 from app.observability import FALLBACK_TAG
@@ -133,8 +133,9 @@ def build_graph(llm: BaseChatModel, settings: Settings, checkpointer: BaseCheckp
                 store: BaseStore | None = None, fallback_llm: BaseChatModel | None = None) -> CompiledStateGraph:
     # 主、备模型分别 bind_tools 再组合：降级后的模型同样能调用工具
     llm_with_tools = with_fallback(llm.bind_tools(TOOLS), fallback_llm.bind_tools(TOOLS) if fallback_llm else None)
-    # 摘要压缩、工具次数到上限后的强制作答、偏好抽取用不带工具的模型，也要能降级
+    # 摘要压缩、工具次数到上限后的强制作答用不带工具的模型，偏好抽取用结构化输出，也都要能降级
     plain_llm = with_fallback(llm, fallback_llm)
+    extractor = with_fallback(memory_extractor(llm), memory_extractor(fallback_llm) if fallback_llm else None)
 
     async def load_memory(state: State, config: RunnableConfig, *, store: BaseStore) -> dict:
         return {"profile": await load_profile(store, get_ctx(config).user["id"])}
@@ -176,7 +177,7 @@ def build_graph(llm: BaseChatModel, settings: Settings, checkpointer: BaseCheckp
         messages = state["messages"]
         human = next((m.text for m in reversed(messages) if isinstance(m, HumanMessage)), "")
         ai = messages[-1].text if isinstance(messages[-1], AIMessage) else ""
-        await extract_and_save(plain_llm, store, get_ctx(config).user["id"], state.get("profile", {}), human, ai)
+        await extract_and_save(extractor, store, get_ctx(config).user["id"], state.get("profile", {}), human, ai)
         return {}
 
     graph = StateGraph(State)

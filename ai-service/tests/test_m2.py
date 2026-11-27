@@ -8,7 +8,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.store.memory import InMemoryStore
 
 from app.graph.builder import build_graph
-from app.graph.memory import parse_update
+from app.graph.memory import MemoryUpdate, clean_update
 from app.rag.rules_index import KNOWLEDGE_DIR, MAX_CHUNK_CHARS, split_markdown
 from tests.fakes import FakeIndex, FakeJava, ScriptedModel, call, make_ctx, settings
 
@@ -52,12 +52,42 @@ async def test_bad_extraction_output_does_not_break_the_turn() -> None:
     assert out["messages"][-1].content == "你好"
 
 
-def test_parse_update_filters_and_truncates() -> None:
-    u = parse_update('```json\n{"set": {"budget": "' + "很" * 100 + '", "x": "y", "avoid": " "}, '
-                     '"delete": ["campus", "bad"]}\n```')
+def test_clean_update_filters_and_truncates() -> None:
+    u = clean_update(MemoryUpdate(set={"budget": "很" * 100, "x": "y", "avoid": " "}, delete=["campus", "bad"]))
     assert set(u.set) == {"budget"} and len(u.set["budget"]) == 60
     assert u.delete == ["campus"]
-    assert parse_update("no json") is None
+
+
+def test_memory_update_schema_describes_slots() -> None:
+    props = MemoryUpdate.model_json_schema()["properties"]
+    assert all(k in props["set"]["description"] for k in ("campus", "budget", "interests", "avoid", "trade_pref"))
+    assert "删除" in props["delete"]["description"]
+
+
+async def test_long_value_truncated_and_bad_slot_dropped_via_structured_output() -> None:
+    store = InMemoryStore()
+    model = ScriptedModel(script=[AIMessage("好的")], memory_replies=[
+        json.dumps({"set": {"interests": "显示器" * 30, "phone": "13812345678"}, "delete": ["nope"]})])
+    graph = build_graph(model, settings(), InMemorySaver(), store)
+    await graph.ainvoke({"messages": [HumanMessage("我平时喜欢淘显示器")]}, config(make_ctx(FakeJava(), FakeIndex()), "7:s"))
+    assert len((await store.aget(("user", "7"), "interests")).value["value"]) == 60
+    assert await store.aget(("user", "7"), "phone") is None
+
+
+async def test_extraction_model_error_does_not_break_the_turn() -> None:
+    model = ScriptedModel(script=[AIMessage("你好")], memory_replies=[RuntimeError("model down")])
+    graph = build_graph(model, settings(), InMemorySaver(), InMemoryStore())
+    out = await graph.ainvoke({"messages": [HumanMessage("以后都只要面交")]},
+                              config(make_ctx(FakeJava(), FakeIndex()), "7:x"))
+    assert out["messages"][-1].content == "你好"
+
+
+async def test_invalid_structured_args_do_not_break_the_turn() -> None:
+    model = ScriptedModel(script=[AIMessage("你好")], memory_replies=['{"set": "不是对象"}'])
+    graph = build_graph(model, settings(), InMemorySaver(), InMemoryStore())
+    out = await graph.ainvoke({"messages": [HumanMessage("以后都只要面交")]},
+                              config(make_ctx(FakeJava(), FakeIndex()), "7:y"))
+    assert out["messages"][-1].content == "你好"
 
 
 def test_split_markdown_by_section_with_size_limit() -> None:

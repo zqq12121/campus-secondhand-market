@@ -26,8 +26,9 @@ class ScriptedModel(BaseChatModel):
     script: list[Any]
     seen: list[list[BaseMessage]] = []
     bound_tools: bool = False
-    # 偏好抽取调用（save_memory）单独应答，不占用 script
-    memory_replies: list[str] = []
+    # 偏好抽取调用（save_memory）单独应答，不占用 script：JSON 字符串按结构化输出的工具调用返回，
+    # 其他字符串当作模型没调工具的普通回复，Exception 实例会被抛出
+    memory_replies: list[Any] = []
     memory_prompts: list[str] = []
     # 每个元素是 (entered, release) 两个 Event：下一次流式调用先 set entered，再等 release 放行；
     # 列表在 bind_tools 的副本间共享，只拦截一次调用
@@ -40,11 +41,21 @@ class ScriptedModel(BaseChatModel):
     def bind_tools(self, tools: Any, **kwargs: Any) -> "ScriptedModel":
         return self.model_copy(update={"bound_tools": True})
 
+    def with_structured_output(self, schema: Any, **kwargs: Any) -> Any:
+        # 基类实现走 bind_tools + 解析工具调用；不支持 method 等参数，这里丢掉
+        return super().with_structured_output(schema)
+
     def _next(self, messages: list[BaseMessage]) -> AIMessage:
         if "长期偏好。根据本轮对话" in messages[-1].text:
             self.memory_prompts.append(messages[-1].text)
             reply = self.memory_replies.pop(0) if self.memory_replies else '{"set": {}, "delete": []}'
-            return AIMessage(reply)
+            if isinstance(reply, Exception):
+                raise reply
+            try:
+                args = json.loads(reply)
+            except ValueError:
+                return AIMessage(reply)
+            return AIMessage("", tool_calls=[{"name": "MemoryUpdate", "args": args, "id": "call_memory"}])
         self.seen.append(messages)
         item = self.script.pop(0)
         return item(messages) if isinstance(item, Callable) else item

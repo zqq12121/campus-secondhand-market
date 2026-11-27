@@ -119,7 +119,7 @@ docker exec -i campus-trade-mysql sh -c 'mysql --default-character-set=utf8mb4 -
 | DELETE | `/api/v1/ai/memory/{key}` | 删除一条，key 为 campus / budget / interests / avoid / trade_pref |
 | DELETE | `/api/v1/ai/memory` | 清空 |
 
-偏好由 `save_memory` 节点在每轮结束时抽取：只记录用户明确表达的偏好，不记录手机号、聊天内容、订单金额。
+偏好由 `save_memory` 节点在每轮结束时抽取：只记录用户明确表达的偏好，不记录手机号、聊天内容、订单金额。抽取用 `with_structured_output(MemoryUpdate, method="function_calling")`（DeepSeek 支持 function_calling 和 json_mode），不再用正则从回复里抠 JSON。槽位名不在白名单里的会被过滤，值超过 60 字会截断；模型报错或返回的参数不合法时只记日志，不影响对话。
 
 ## 可观测性
 
