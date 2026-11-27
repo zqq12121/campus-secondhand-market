@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     ai_session_ttl_days: int = 30
     ai_rate_per_minute: int = 10
     ai_rate_per_day: int = 100
+    # 同一会话同时只处理一个请求；锁覆盖整个 SSE 流，TTL 兜底进程崩溃时锁不释放
+    ai_conversation_lock_ttl_seconds: int = 120
 
     # 可观测性：模型价格（元 / 百万 token），只用于估算成本，留 0 不计
     ai_price_input_per_m: float = 0.0

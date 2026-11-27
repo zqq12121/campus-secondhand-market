@@ -1,13 +1,14 @@
 import json
 
 import httpx
+from fakeredis import FakeAsyncRedis
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.store.memory import InMemoryStore
 
 from app.graph.builder import build_graph
 from app.main import AppState, app
-from tests.fakes import FakeIndex, FakeJava, FakeRedis, ScriptedModel, call, goods, settings
+from tests.fakes import FakeIndex, FakeJava, ScriptedModel, call, goods, settings
 
 
 def setup_app(script: list, **overrides: object) -> FakeJava:
@@ -15,7 +16,7 @@ def setup_app(script: list, **overrides: object) -> FakeJava:
     java = FakeJava({"g1": goods("g1", "台灯", "15.00"), "g2": goods("g2", "旧台灯", "5.00", reason="BLOCKED")})
     store = InMemoryStore()
     graph = build_graph(ScriptedModel(script=script), s, InMemorySaver(), store)
-    app.state.ai = AppState(s, FakeRedis(), java, FakeIndex(), graph, store)
+    app.state.ai = AppState(s, FakeAsyncRedis(), java, FakeIndex(), graph, store)
     return java
 
 

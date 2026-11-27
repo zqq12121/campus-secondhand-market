@@ -107,6 +107,7 @@ docker exec -i campus-trade-mysql sh -c 'mysql --default-character-set=utf8mb4 -
 - `edits` 只接受白名单字段。求购：title / description / categoryId / campusId / priceMin / priceMax / validDays；发布草稿：title / description / categoryId / conditionLevel / price。修改后会重新校验。
 - 求购在确认后才调 Java `POST /wants` 发布；发布草稿只回给前端预填，始终由用户自己在发布页点发布。
 - `interruptId` 不存在或已处理返回 409。有待确认卡片时用户直接发新消息，视为取消。
+- 同一会话同时只处理一个请求：上一条的 SSE 流还没结束时，同会话的 `/chat` 或 `/resume` 返回 409「上一条消息还在处理，请稍后」。
 
 未登录或 token 失效返回 401，账号被封禁返回 403，超限返回 429，格式与 Java 统一响应一致。
 
@@ -173,6 +174,7 @@ docker exec -i campus-trade-mysql sh -c 'mysql --default-character-set=utf8mb4 -
 - **选主同步**：商品索引同步和规则库重建都是后台循环，每个进程都会启动，但只有拿到 Redis 锁的那个进程真正执行。加锁用 `SET key <uuid> NX EX ttl`，持有者每 ttl/3 秒续期，其他进程每 ttl/3 秒重试一次。续期和释放用 Lua 脚本，先比对 value 再操作，只会动自己的锁。续期失败时立即停止同步，避免两个进程同时写；进程正常退出时主动释放锁，崩溃时锁最多 ttl 秒后过期，由其他进程接手。配置项：`AI_LEADER_LOCK_TTL_SECONDS`（默认 30）、`GOODS_SYNC_LOCK_KEY`、`RULES_SYNC_LOCK_KEY`。
 - **规则库蓝绿重建**：每个内容版本写进独立的索引 `ai_rules_<hash 前 8 位>`（键前缀 `ai:kb:<hash>`），Redis 键 `ai:rules_index:current` 指向当前版本。重建时先把新版本完整写好，再切换指针，最后删除旧索引。重建期间检索一直读旧版本。hash 包含 schema 版本和向量维度，schema 或 embedding 模型变化时会自动重建。旧版本的固定索引 `ai_rules` 会在第一次蓝绿重建后删除。
 - 商品索引是增量同步，没有做蓝绿，只加了选主。
+- **会话锁**：`/chat` 和 `/resume` 执行图之前按 thread_id（`user_id:conv_id`）加锁，键为 `ai:conv_lock:<user>:<conv>`，value 是随机 uuid。拿不到锁直接返回 409。锁覆盖整个 SSE 流，在流的 finally 里用 Lua 校验 value 后释放；流抛异常、客户端中途断开也会释放。`cancel_pending` 和输入防护拒答都会读写会话状态，所以也放在锁内执行。`AI_CONVERSATION_LOCK_TTL_SECONDS`（默认 120）兜底进程崩溃导致锁没释放的情况；单轮执行超过 TTL 时锁会提前过期，这时不再保证互斥。
 
 已知局限：锁没有 fencing token。如果主实例长时间卡住（比如 GC、网络分区）超过 ttl，可能和新主短暂重叠。两类同步都是幂等写入，重叠只会造成重复工作，不会写坏数据。
 

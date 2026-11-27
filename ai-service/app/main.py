@@ -45,6 +45,7 @@ META_TTL_SECONDS = 600
 
 CONV_ID_PATTERN = r"^[0-9a-f-]{36}$"
 CANCELLED_BY_NEW_MESSAGE = "用户没有确认就发送了新消息，本次操作已取消。"
+CONVERSATION_BUSY = "上一条消息还在处理，请稍后"
 
 
 class ChatRequest(BaseModel):
@@ -171,7 +172,27 @@ def thread_config(ctx: RequestContext, conv_id: str) -> dict[str, Any]:
     return {"configurable": {"thread_id": f"{ctx.user['id']}:{conv_id}", "ctx": ctx}, "recursion_limit": 40}
 
 
-async def stream_chat(st: AppState, ctx: RequestContext, conv_id: str, graph_input: Any) -> AsyncIterator[str]:
+async def lock_conversation(st: AppState, ctx: RequestContext, conv_id: str) -> RedisLock:
+    """按 thread_id 加锁：用户连点两次发送、/chat 和 /resume 同时到达时，两次图执行不会并发读写同一个 checkpoint。"""
+    lock = RedisLock(st.redis, f"ai:conv_lock:{ctx.user['id']}:{conv_id}",
+                     st.settings.ai_conversation_lock_ttl_seconds)
+    if not await lock.acquire():
+        raise HTTPException(409, CONVERSATION_BUSY)
+    return lock
+
+
+async def release_lock(lock: RedisLock | None) -> None:
+    if lock is None:
+        return
+    try:
+        # 客户端断开时生成器会被取消；shield 保证释放这一步照样执行完
+        await asyncio.shield(lock.release())
+    except Exception:
+        log.warning("释放会话锁失败 key=%s，等待过期", lock.key)
+
+
+async def stream_chat(st: AppState, ctx: RequestContext, conv_id: str, graph_input: Any,
+                      lock: RedisLock | None = None) -> AsyncIterator[str]:
     trace = TraceCollector(st.settings.ai_price_input_per_m, st.settings.ai_price_output_per_m)
     config = {**thread_config(ctx, conv_id), "callbacks": [trace, *st.callbacks],
               # Langfuse 按这两个字段归组用户和会话
@@ -226,6 +247,7 @@ async def stream_chat(st: AppState, ctx: RequestContext, conv_id: str, graph_inp
             "user": ctx.user["id"], "conv": conv_id, "ms": int((time.monotonic() - started) * 1000),
             "pending": pending, "revised": bool(revised), **trace.summary(),
         }, ensure_ascii=False))
+        await release_lock(lock)
 
 
 def _tool_json(m: ToolMessage, name: str) -> dict[str, Any] | None:
@@ -272,11 +294,15 @@ async def guarded_context(st: AppState, token: str, me: dict[str, Any]) -> Reque
                           categories=categories, campuses=campuses, rules_index=st.rules_index)
 
 
-async def refusal(st: AppState, ctx: RequestContext, conv_id: str) -> AsyncIterator[str]:
-    state = await st.graph.aget_state(thread_config(ctx, conv_id))
-    yield sse("token", INPUT_REFUSAL)
-    yield sse("done", {"conversationId": conv_id, "usage": {"input_tokens": 0, "output_tokens": 0},
-                       "pending": bool(state.interrupts)})
+async def refusal(st: AppState, ctx: RequestContext, conv_id: str,
+                  lock: RedisLock | None = None) -> AsyncIterator[str]:
+    try:
+        state = await st.graph.aget_state(thread_config(ctx, conv_id))
+        yield sse("token", INPUT_REFUSAL)
+        yield sse("done", {"conversationId": conv_id, "usage": {"input_tokens": 0, "output_tokens": 0},
+                           "pending": bool(state.interrupts)})
+    finally:
+        await release_lock(lock)
 
 
 def sse_response(gen: AsyncIterator[str]) -> StreamingResponse:
@@ -293,13 +319,19 @@ async def chat(body: ChatRequest, user: tuple[str, dict[str, Any]] = Depends(cur
         raise HTTPException(400, "图片必须先上传到平台")
     ctx = await guarded_context(st, token, me)
     conv_id = body.conversationId or str(uuid.uuid4())
-    if is_injection(body.message):
-        # 不进模型、不写入会话历史，也不取消待确认的卡片
-        log.warning("输入防护拦截 user=%s conv=%s", me["id"], conv_id)
-        return sse_response(refusal(st, ctx, conv_id))
-    await cancel_pending(st.graph, thread_config(ctx, conv_id))
-    message = HumanMessage(human_content(body.message, body.images))
-    return sse_response(stream_chat(st, ctx, conv_id, {"messages": [message]}))
+    # 拒答和取消待确认卡片都会读写会话状态，也要在锁内；锁由流结束时释放
+    lock = await lock_conversation(st, ctx, conv_id)
+    try:
+        if is_injection(body.message):
+            # 不进模型、不写入会话历史，也不取消待确认的卡片
+            log.warning("输入防护拦截 user=%s conv=%s", me["id"], conv_id)
+            return sse_response(refusal(st, ctx, conv_id, lock))
+        await cancel_pending(st.graph, thread_config(ctx, conv_id))
+        message = HumanMessage(human_content(body.message, body.images))
+        return sse_response(stream_chat(st, ctx, conv_id, {"messages": [message]}, lock))
+    except BaseException:
+        await release_lock(lock)
+        raise
 
 
 @app.post("/api/v1/ai/chat/{conversation_id}/resume")
@@ -309,11 +341,16 @@ async def resume(body: ResumeRequest, conversation_id: str = PathParam(pattern=C
     """确认卡片的回调：用户确认 / 修改后确认 / 取消一个写操作。"""
     token, me = user
     ctx = await guarded_context(st, token, me)
-    state = await st.graph.aget_state(thread_config(ctx, conversation_id))
-    if body.interruptId not in {i.id for i in state.interrupts}:
-        raise HTTPException(409, "没有待确认的操作，可能已处理或已取消")
-    command = Command(resume={body.interruptId: {"decision": body.decision, "edits": body.edits}})
-    return sse_response(stream_chat(st, ctx, conversation_id, command))
+    lock = await lock_conversation(st, ctx, conversation_id)
+    try:
+        state = await st.graph.aget_state(thread_config(ctx, conversation_id))
+        if body.interruptId not in {i.id for i in state.interrupts}:
+            raise HTTPException(409, "没有待确认的操作，可能已处理或已取消")
+        command = Command(resume={body.interruptId: {"decision": body.decision, "edits": body.edits}})
+        return sse_response(stream_chat(st, ctx, conversation_id, command, lock))
+    except BaseException:
+        await release_lock(lock)
+        raise
 
 
 @app.get("/api/v1/ai/memory")

@@ -29,6 +29,9 @@ class ScriptedModel(BaseChatModel):
     # 偏好抽取调用（save_memory）单独应答，不占用 script
     memory_replies: list[str] = []
     memory_prompts: list[str] = []
+    # 每个元素是 (entered, release) 两个 Event：下一次流式调用先 set entered，再等 release 放行；
+    # 列表在 bind_tools 的副本间共享，只拦截一次调用
+    gates: list[tuple[asyncio.Event, asyncio.Event]] = []
 
     @property
     def _llm_type(self) -> str:
@@ -53,6 +56,10 @@ class ScriptedModel(BaseChatModel):
     async def _astream(self, messages: list[BaseMessage], stop: Any = None,
                        run_manager: AsyncCallbackManagerForLLMRun | None = None,
                        **kwargs: Any) -> AsyncIterator[ChatGenerationChunk]:
+        if self.gates:
+            entered, release = self.gates.pop(0)
+            entered.set()
+            await release.wait()
         msg = self._next(messages)
         chunks = [
             {"name": tc["name"], "args": json.dumps(tc["args"]), "id": tc["id"], "index": i}
