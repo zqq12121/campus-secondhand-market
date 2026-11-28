@@ -36,6 +36,7 @@
 | [frontend](frontend/README.md) | Vue 3 + TypeScript + Vite + Element Plus + Pinia；用户端和后台两个入口，自带 Mock 后端 |
 | [ai-service](ai-service/README.md) | Python 3.11 + FastAPI + LangGraph，DeepSeek 模型，本地 bge-small-zh 向量 |
 | [docs/阅读指南.md](docs/阅读指南.md) | 从零读懂项目：包结构约定、模块地图、推荐阅读顺序、关键流程的代码路线、中间件用途 |
+| [docs/AI服务阅读指南.md](docs/AI服务阅读指南.md) | 读懂 ai-service：分层、一次对话的完整链路、推荐阅读顺序、Redis 键、常见改动从哪下手 |
 | [docs/接口文档.md](docs/接口文档.md) | 前后端接口约定，含状态机、错误码和设计假设 |
 | [docs/上线部署.md](docs/上线部署.md) | 生产部署：单机 docker compose + HTTPS、启动自检、备份、上线检查清单 |
 | deploy | 生产用 Nginx HTTPS 配置、证书签发与备份脚本 |
